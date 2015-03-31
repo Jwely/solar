@@ -29,6 +29,12 @@ class solar:
         distance = meters
         energy   = watts or joules
         time     = mostly in datetime objects.
+
+    PLANNED IMPROVEMENT:
+    1) inputs of numpy arrays for lat and lon needs to be allowed.
+    2) inputs of a numpy array DEM for slope/aspect effects on incident solar energy
+    intensity needto be allowed as well.
+    
     """
 
     def __init__(self, lat, lon, time_zone, date_time_obj, fmt = False):
@@ -482,7 +488,7 @@ if __name__ == "__main__":
     lat         = 37
     lon         = -76.4
     tz          = -4
-    datestamp = datetime.now()
+    datestamp   = datetime.now()
     
     s = solar(lat, lon, tz, datestamp)
     
