@@ -1,11 +1,12 @@
 """
-solar object class, built in my spare time for a personal project, but
-will eventually be merged into the dnppy module
+solar object class, built in my spare time for a personal project.
+
+
+Distributed with the dnppy module, with permission from its original
+author, Jeffry Ely.
 """
 
-
-__author__ = "Jeffry Ely, Jeff.ely.08@gmail.com"
-
+__author__ = ["Jeffry Ely, Jeff.ely.08@gmail.com"]
 
 from datetime import datetime, timedelta
 from numpy import *
@@ -23,6 +24,8 @@ class solar:
         time_zone       integer such as (-5) for eastern time (+ to E)
         date_time_obj   local time datetime object, may be datestamp with matching fmt
         fmt             format for interpreting "date_time_obj" if it is of string type
+        slope           numpy array, slope of land at lat,lon for solar energy calculations
+        aspect          numpy array, aspect of land at lat,lon for solar energy calculations
 
     Units used by this class unless otherwise labled:
         angle    = degrees
@@ -31,13 +34,13 @@ class solar:
         time     = mostly in datetime objects.
 
     PLANNED IMPROVEMENT:
-    1) inputs of numpy arrays for lat and lon needs to be allowed.
+    1) inputs of numpy arrays for lat and lon needs to be allowed. DONE
     2) inputs of a numpy array DEM for slope/aspect effects on incident solar energy
-    intensity needto be allowed as well.
-    
+    intensity need to be allowed.
     """
 
-    def __init__(self, lat, lon, time_zone, date_time_obj, fmt = False, metadata = None):
+    def __init__(self, lat, lon, time_zone, date_time_obj,
+                         fmt = False, slope = None, aspect = None):
         """
         initializes critical spatial and temporal information
 
@@ -46,6 +49,8 @@ class solar:
         time_zone       float of time shift from GMT (such as "-5" for EST)
         date_time_obj   either a timestamp string following fmt or a datetime obj
         fmt             if date_time_obj is a string, fmt is required to interpret it
+        slope           slope of land at lat,lon for solar energy calculations
+        aspect          aspect of land at lat,lon for solar energy calculations
         """
 
         # attribute list
@@ -72,14 +77,14 @@ class solar:
         # compute solar attributes
         if isinstance(lat, ndarray) and isinstance(lon, ndarray):
             self.is_numpy   = True
-            self.metadata   = metadata
-            self.compute_all_numpy()
             
+            self.compute_all_numpy()
         else:
             self.is_numpy   = False
             self.compute_all_scalar()
-            
 
+        return
+    
 
     def set_datetime(self, date_time_obj, fmt = False):
         """
@@ -419,14 +424,18 @@ class solar:
         # perform an approximate atmospheric refraction correction
         
         # matrix hour_angle calculations
+        # these equations are hideous, but im not sure how to improve them without adding computational complexity
         if self.is_numpy:
-            e = ((self.zenith * 0) + 90) - self.zenith
-            ar = e
-            
-            ar[ar >  85]     = 0
-            ar[ar >   5]     = 58.1 / tan(radians(ar[ar >5])) - 0.07 / tan(radians(ar[ar >5]))**3 + 0.000086 / tan(radians(ar[ar >5]))**5
-            ar[ar >  -0.575] = 1735 + ar[ar > -0.575] * (103.4 + ar[ar > -0.575] * (-12.79 + ar[ar > -0.575] * 0.711))
-            ar[ar <= -0.575] = -20.772 / tan(radians(ar[ar <= -0.575]))
+            e = 90 - self.zenith
+            ar = e * 0 
+
+            ar[e >  85]                 = 0
+            ar[(e > 5) & (e <=85)]      = 58.1 / tan(radians(e[(e > 5) & (e <=85)])) - \
+                                          0.07 / tan(radians(e[(e > 5) & (e <=85)]))**3 + \
+                                          0.000086 / tan(radians(e[(e > 5) & (e <=85)]))**5
+            ar[(e > -0.575) & (e <= 5)] = 1735 + e[(e > -0.575) & (e <= 5)] * \
+                                            (103.4 + e[(e > -0.575) & (e <= 5)] * (-12.79 + e[(e > -0.575) & (e <= 5)] * 0.711))
+            ar[e <= -0.575]             = -20.772 / tan(radians(e[e <= -0.575]))
 
         # scalar hour_angle calculations
         else:
@@ -438,6 +447,7 @@ class solar:
             elif e > -0.575:    ar = 1735 + e * (103.4 + e * ( -12.79 + e * 0.711)) 
             else:               ar = -20.772 / tan(er)
             
+
         self.elevation_noatmo = e
         self.atmo_refraction  = ar / 3600
         self.elevation        = self.elevation_noatmo + self.atmo_refraction
@@ -450,17 +460,25 @@ class solar:
 
         lat = radians(self.lat)        
         d   = radians(self.declination)
-        ha  = self.hour_angle                
+        ha  = radians(self.hour_angle)                
         z   = radians(self.zenith)     
 
         # matrix azimuth calculations
-        if self.is_numpy: pass
-            
-        if ha > 0:
-            self.azimuth = (degrees(arccos(((sin(lat) * cos(z)) - sin(d)) / cos(lat) * sin(z))) + 180) % 360
+        # these equations are hideous, but im not sure how to improve them without adding computational complexity
+        if self.is_numpy:
 
-        else:
-            self.azimuth = (540 - degrees(arccos(((sin(lat) * cos(z)) -sin(d))/ (cos(lat) * sin(z))))) % 360
+            az = ha * 0
+
+            az[ha > 0] = (degrees(arccos(((sin(lat[ha > 0]) * cos(z[ha > 0])) - sin(d)) / (cos(lat[ha > 0]) * sin(z[ha > 0])))) + 180) % 360
+            az[ha <=0] = (540 - degrees(arccos(((sin(lat[ha <=0]) * cos(z[ha <=0])) -sin(d))/ (cos(lat[ha <=0]) * sin(z[ha <=0]))))) % 360
+
+            self.azimuth = az
+
+        else:  
+            if ha > 0:
+                self.azimuth = (degrees(arccos(((sin(lat) * cos(z)) - sin(d)) / (cos(lat) * sin(z)))) + 180) % 360
+            else:
+                self.azimuth = (540 - degrees(arccos(((sin(lat) * cos(z)) -sin(d))/ (cos(lat) * sin(z))))) % 360
 
         return self.azimuth
 
@@ -468,17 +486,15 @@ class solar:
     def get_earth_distance(self):
         """ distance between the earth and the sun at ref_datetime"""
 
-        # temporarily set to simply return 1 AU (in meters)
-        self.earth_dist = float(149567871000)
-
-        # this should eventually be a function of datetime for better precision
+        # convert rad_vector length from AU to meters
+        self.earth_dist = self.rad_vector * 149597870700
         
         return self.earth_dist
 
 
-    def get_inst_irradiance(self):
+    def get_norm_irradiance(self):
         """
-        calculates instantaneous incoming solar energy in W/m^2
+        calculates incoming solar energy in W/m^2 to a surface normal to the sun
 
         inst_irradiance is calculated as 
             = sun_surf_radiance *(sun_radius / earth_distance)^2
@@ -489,20 +505,30 @@ class solar:
         ed = self.get_earth_distance()
 
         # calculate irradiance to normal surface at earth distance
-        self.inst_irradiance = self.sun_surf_rad * (self.sun_radius / ed)**2
+        self.norm_irradiance = self.sun_surf_rad * (self.sun_radius / ed)**2
 
         # correct for surface orientation based on sun angles
         
-        return self.inst_irradiance
+        return self.norm_irradiance
+
+    def get_inc_irradiance(self):
+        """
+        calculates the actual incident solar irradiance at a given lat,lon coordinate
+        with adjustments for slope and aspect if they have been given.
+        """
+
+        return
 
 
     def compute_all_scalar(self):
         """ computes and prints all the attributes of this solar object"""
 
         print("="*50)
+        print("Interogation of single point solar object")
+        print("="*50)
         print("latitude, longitude \t{0}, {1}".format(self.lat, self.lon))
-        
         print("datetime \t\t{0} (GMT)".format(self.rdt))
+        print("")
         print("abs julian day \t\t{0}\t (day)".format(self.ajd))
         print("abs julian century \t{0}\t (cen)".format(self.ajc))
         print("suns goemean long \t{0}\t (deg)".format(self.get_geomean_long()))
@@ -524,15 +550,16 @@ class solar:
         print("sunrise \t\t{0}\t (HMS - LST)".format(self.get_sunrise()))
         print("sunset  \t\t{0}\t (HMS - LST)".format(self.get_sunset()))
         print("sunlight durration \t{0}\t (HMS)".format(self.get_sunlight()))
-        print("")
         print("true solar time \t{0}\t (HMS - LST)".format(self.get_true_solar()))
+        print("")
         print("hour angle \t\t{0}\t (deg)".format(self.get_hour_angle()))
         print("solar zenith angle \t{0}\t (deg)".format(self.get_zenith()))
         print("solar elevation angle \t{0}\t (deg)".format(self.get_elevation()))
         print("solar azimuth angle \t{0}\t (deg)".format(self.get_azimuth()))
 
         print("")
-        print("irradiance \t\t{0}\t (W/m*m)".format(self.get_inst_irradiance()))
+        print("earth sun distance \t{0}(m)".format(self.get_earth_distance()))
+        print("norm irradiance \t{0}\t (W/m*m)".format(self.get_norm_irradiance()))
         print("="*50)
 
 
@@ -540,9 +567,12 @@ class solar:
         """ computes and prints all the attributes of this solar object"""
 
         print("="*50)
-        print("latitude, longitude \t{0}, {1}".format(self.lat, self.lon))
-        
+        print("Interogation of entire matrix of points.")
+        print("Some values displayed below are spatial averages")
+        print("="*50)
+        print("latitude, longitude \t{0}, {1}".format(self.lat.mean(), self.lon.mean()))
         print("datetime \t\t{0} (GMT)".format(self.rdt))
+        print("")
         print("abs julian day \t\t{0}\t (day)".format(self.ajd))
         print("abs julian century \t{0}\t (cen)".format(self.ajc))
         print("suns goemean long \t{0}\t (deg)".format(self.get_geomean_long()))
@@ -558,22 +588,24 @@ class solar:
         print("sun right ascension \t{0}\t (deg)".format(self.get_right_ascension()))
         print("solar declination angle {0}\t (deg)".format(self.get_declination()))
         print("equation of time \t{0}\t (min)".format(self.get_equation_of_time()))
-        print("hour angle sunrise\t{0}\t (deg)".format(self.get_hour_angle_sunrise()))
+        print("hour angle sunrise\t{0}\t (deg)".format(self.get_hour_angle_sunrise().mean()))
         print("")
         print("solar noon \t\t{0}\t (HMS - LST)".format(self.get_solar_noon()))
         print("sunrise \t\t{0}\t (HMS - LST)".format(self.get_sunrise()))
         print("sunset  \t\t{0}\t (HMS - LST)".format(self.get_sunset()))
         print("sunlight durration \t{0}\t (HMS)".format(self.get_sunlight()))
-        print("")
         print("true solar time \t{0}\t (HMS - LST)".format(self.get_true_solar()))
-        print("hour angle \t\t{0}\t (deg)".format(self.get_hour_angle()))
-        print("solar zenith angle \t{0}\t (deg)".format(self.get_zenith()))
-        print("solar elevation angle \t{0}\t (deg)".format(self.get_elevation()))
-        print("solar azimuth angle \t{0}\t (deg)".format(self.get_azimuth()))
+        print("")
+        print("hour angle \t\t{0}\t (deg)".format(self.get_hour_angle().mean()))
+        print("solar zenith angle \t{0}\t (deg)".format(self.get_zenith().mean()))
+        print("solar elevation angle \t{0}\t (deg)".format(self.get_elevation().mean()))
+        print("solar azimuth angle \t{0}\t (deg)".format(self.get_azimuth().mean()))
 
         print("")
-        print("irradiance \t\t{0}\t (W/m*m)".format(self.get_inst_irradiance()))
+        print("earth sun distance \t{0}(m)".format(self.get_earth_distance()))
+        print("norm irradiance \t{0}\t (W/m*m)".format(self.get_norm_irradiance()))
         print("="*50)
+
 
 if __name__ == "__main__":
 
@@ -587,10 +619,8 @@ if __name__ == "__main__":
     sc = solar(lat, lon, tz, datestamp)
     
     # numpy array test
-    lat         = zeros((1, 2)) + 37
-    lon         = zeros((1, 2)) -76.4
-    tz          = -4
-    datestamp   = datetime.now()
+    lat         = array([37, 37])
+    lon         = array([-76.4, -76.4])
     
     sm = solar(lat, lon, tz, datestamp)
 
