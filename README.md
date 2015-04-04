@@ -5,4 +5,6 @@ to make sense of the complex relationship between a point on the earths surface 
 For starters, it replicates the functionality of the NOAA calculator found here:
 [http://www.esrl.noaa.gov/gmd/grad/solcalc/calcdetails.html]
 
+It has recently been updated to allow calculations for all points within a numpy array (lat,lon)
+
 
