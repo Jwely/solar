@@ -37,6 +37,18 @@ class solar:
     1) inputs of numpy arrays for lat and lon needs to be allowed. DONE
     2) inputs of a numpy array DEM for slope/aspect effects on incident solar energy
     intensity need to be allowed.
+    3) needs to be structured to allow optimization for extremely large input arrays
+       presently, all variables are calculated and indefinitely kept in memory.
+       There should be some kind of "large_dataset" setting that allows desired values
+       to be saved to disk and then removed from memory, and other unneeded values to
+       be skipped all together.
+
+    present performance:
+    To process about one landsat tile (7300 square) requires 9GB of memory and takes
+    45 seconds to process on a single 3.3GHz thread. It would be nice to get the same output
+    to run on ~5GB of memory so a 8GB system could handle it. Further improvements could allow
+    the image to be split into chunks and either A) run in series to keep memory consumption low
+    or B) run in parallel to decrease processing time.
     """
 
     def __init__(self, lat, lon, time_zone, date_time_obj,
@@ -609,20 +621,26 @@ class solar:
 
 if __name__ == "__main__":
 
+
+    tz          = -4
+    datestamp   = datetime.now()
     
     # scalar test
     lat         = 37
     lon         = -76.4
-    tz          = -4
-    datestamp   = datetime.now()
-    
     sc = solar(lat, lon, tz, datestamp)
-    
+
+    start = datetime.now()
     # numpy array test
-    lat         = array([37, 37])
-    lon         = array([-76.4, -76.4])
-    
+    lat         = array([[36, 36],[38,38]])
+    lon         = array([[-77.4,-75.4],[-77.4,-75.4]])
+    lat         = zeros((7300,7300)) + 37
+    lon         = zeros((7300,7300)) - 76.4
     sm = solar(lat, lon, tz, datestamp)
+    finish = datetime.now()
+
+    elapsed = finish - start
+    print elapsed
 
 
 
