@@ -6,12 +6,13 @@ Distributed with the dnppy module, with permission from its original
 author, Jeffry Ely.
 """
 
+
 __author__ = ["Jeffry Ely, Jeff.ely.08@gmail.com"]
+
 
 from datetime import datetime, timedelta
 from numpy import *
 
-    
 class solar:
     """
     Object class for handling solar calculations. Many equations are taken from the
@@ -35,11 +36,11 @@ class solar:
         time     = mostly in datetime objects.
 
     PLANNED IMPROVEMENT:
-    1) inputs of numpy arrays for lat and lon needs to be allowed. DONE
+    1) DONE. Inputs of numpy arrays for lat and lon needs to be allowed.
     2) inputs of a numpy array DEM for slope/aspect effects on incident solar energy
-    intensity need to be allowed.
-    3) needs to be structured to allow optimization for extremely large input arrays
-       presently, all variables are calculated and indefinitely kept in memory.
+        intensity need to be allowed.
+    3) needs to be structured to allow optimization for extremely large input arrays.
+       Presently, all variables are calculated and indefinitely kept in memory (12-15 arrays).
        There should be some kind of "large_dataset" setting that allows desired values
        to be saved to disk and then removed from memory, and other unneeded values to
        be skipped all together.
@@ -57,23 +58,52 @@ class solar:
         """
         initializes critical spatial and temporal information
 
-        lat             decimal degrees latitude
-        lon             decimal degrees longitude
-        time_zone       float of time shift from GMT (such as "-5" for EST)
-        date_time_obj   either a timestamp string following fmt or a datetime obj
-        fmt             if date_time_obj is a string, fmt is required to interpret it
-        slope           slope of land at lat,lon for solar energy calculations
-        aspect          aspect of land at lat,lon for solar energy calculations
+        Inputs: 
+            lat             decimal degrees latitude
+            lon             decimal degrees longitude
+            time_zone       float of time shift from GMT (such as "-5" for EST)
+            date_time_obj   either a timestamp string following fmt or a datetime obj
+            fmt             if date_time_obj is a string, fmt is required to interpret it
+            slope           slope of land at lat,lon for solar energy calculations
+            aspect          aspect of land at lat,lon for solar energy calculations
+
+        Referencable Attributes:
+            lat                 latitude                                    (array)
+            lon                 longitude                                   (array)
+            tz                  time zone                                   (scalar)
+            rdt                 reference datetime object (date_time_obj)   (scalar)
+            ajd                 absolute julian day                         (scalar)
+            ajc                 absolute julian century                     (scalar)
+            geomean_long        geometric mean longitude of the sun         (scalar)
+            geomean_anom        geometric mean longitude anomaly of the sun (scalar)
+            earth_eccent        eccentricity of earths orbit                (scalar)
+            sun_eq_of_center    the suns equation of center                 (scalar)
+            true_long           true longitude of the sun                   (scalar)
+            true_anom           true longitude anomaly of the sun           (scalar)
+            app_long            the suns apparent longitude                 (scalar)
+            oblique_mean_elip   earth oblique mean elipse                   (scalar)
+            oblique_corr        correction to earths oblique elipse         (scalar)
+            right_ascension     suns right ascension angle                  (scalar)
+            declination         solar delination angle                      (scalar)
+            equation_of_time    equation of time (minutes)                  (scalar)
+            hour_angle_sunrise  the hour angle at sunrise                   (array)
+            solar_noon          LST of solar noon                           (array)
+            sunrise             LST of sunrise time                         (array)
+            sunset              LST of sunset time                          (array)
+            sunlight            LST fractional days of sunlight             (array)
+            true_solar          LST for true solar time                     (array)
+            hour_angle          total hour angle                            (array)
+            zenith              zenith angle                                (array)
+            elevation           elevation angle                             (array)
+            azimuth             azimuthal angle                             (array)
+            rad_vector          radiation vector (distance in AU)           (scalar)
+            earth_distance      earths distance in meters                   (scalar)
+            norm_irradiance     incident solar energy at earth distance     (scalar)
         """
 
-        # attribute list
-        self.rdt            = []                # ref_datetime. Precise GMT time of solar obj
-        self.tz             = 0.0               # timezone, offset from GMT - float
-        self.ajd            = 0.0               # absolute julian day
-        self.ajc            = 0.0               # absolute julian century
-        self.earth_eccent   = 0.0               # eccentricity of earths orbit
-
-
+        # initialized attributes
+        self.tz = time_zone
+        
         # Constants as attributes
         self.sun_surf_rad   = 63156942.6        # radiation at suns surface (W/m^2)
         self.sun_radius     = 695800000.        # radius of the sun in meters
@@ -90,12 +120,9 @@ class solar:
         # compute solar attributes
         if isinstance(lat, ndarray) and isinstance(lon, ndarray):
             self.is_numpy   = True
-            
-            self.compute_all_numpy()
         else:
             self.is_numpy   = False
-            self.compute_all_scalar()
-
+        
         return
     
 
@@ -134,7 +161,6 @@ class solar:
         time_del = self.rdt - jan_1st_2000
         self.ajd = float(jan_1st_2000_jd) + float(time_del.total_seconds())/86400
         self.ajc = (self.ajd - 2451545)/36525.0
-
         return
 
     
@@ -217,7 +243,6 @@ class solar:
         ec = self.earth_eccent
         ta = radians(self.true_anom)
         
-        
         self.rad_vector  = (1.000001018*(1 - ec**2)) / (1 + ec *cos(ta))
         return self.rad_vector
 
@@ -289,6 +314,7 @@ class solar:
                                 1.25 * ec * ec * sin(2 * gma))
         
         return self.equation_of_time
+
 
     def get_hour_angle_sunrise(self):
         """ calculates the hour hangle of sunrise """
@@ -519,10 +545,9 @@ class solar:
 
         # calculate irradiance to normal surface at earth distance
         self.norm_irradiance = self.sun_surf_rad * (self.sun_radius / ed)**2
-
-        # correct for surface orientation based on sun angles
         
         return self.norm_irradiance
+
 
     def get_inc_irradiance(self):
         """
@@ -533,57 +558,19 @@ class solar:
         return
 
 
-    def compute_all_scalar(self):
-        """ computes and prints all the attributes of this solar object"""
-
-        print("="*50)
-        print("Interogation of single point solar object")
-        print("="*50)
-        print("latitude, longitude \t{0}, {1}".format(self.lat, self.lon))
-        print("datetime \t\t{0} (GMT)".format(self.rdt))
-        print("")
-        print("abs julian day \t\t{0}\t (day)".format(self.ajd))
-        print("abs julian century \t{0}\t (cen)".format(self.ajc))
-        print("suns goemean long \t{0}\t (deg)".format(self.get_geomean_long()))
-        print("suns goemean anom \t{0}\t (deg)".format(self.get_geomean_anom()))
-        print("earth eccentricity \t{0}".format(self.get_earth_eccent()))
-        print("suns eq of center \t{0}".format(self.get_sun_eq_of_center()))
-        print("suns true long \t\t{0}\t (deg)".format(self.get_true_long()))
-        print("suns true anom \t\t{0}\t (deg)".format(self.get_true_anom()))
-        print("radiation vector \t{0}\t (AU)".format(self.get_rad_vector()))
-        print("suns apparent long \t{0}\t (deg)".format(self.get_app_long()))
-        print("earth obliq mean elip \t{0}\t (deg)".format(self.get_oblique_mean_elip()))
-        print("earth obliq correction\t{0}\t (deg)".format(self.get_oblique_corr()))
-        print("sun right ascension \t{0}\t (deg)".format(self.get_right_ascension()))
-        print("solar declination angle {0}\t (deg)".format(self.get_declination()))
-        print("equation of time \t{0}\t (min)".format(self.get_equation_of_time()))
-        print("hour angle sunrise\t{0}\t (deg)".format(self.get_hour_angle_sunrise()))
-        print("")
-        print("solar noon \t\t{0}\t (HMS - LST)".format(self.get_solar_noon()))
-        print("sunrise \t\t{0}\t (HMS - LST)".format(self.get_sunrise()))
-        print("sunset  \t\t{0}\t (HMS - LST)".format(self.get_sunset()))
-        print("sunlight durration \t{0}\t (HMS)".format(self.get_sunlight()))
-        print("true solar time \t{0}\t (HMS - LST)".format(self.get_true_solar()))
-        print("")
-        print("hour angle \t\t{0}\t (deg)".format(self.get_hour_angle()))
-        print("solar zenith angle \t{0}\t (deg)".format(self.get_zenith()))
-        print("solar elevation angle \t{0}\t (deg)".format(self.get_elevation()))
-        print("solar azimuth angle \t{0}\t (deg)".format(self.get_azimuth()))
-
-        print("")
-        print("earth sun distance \t{0}(m)".format(self.get_earth_distance()))
-        print("norm irradiance \t{0}\t (W/m*m)".format(self.get_norm_irradiance()))
-        print("="*50)
-
-
-    def compute_all_numpy(self):
+    def compute_all(self):
         """ computes and prints all the attributes of this solar object"""
 
         print("="*50)
         print("Interogation of entire matrix of points.")
         print("Some values displayed below are spatial averages")
         print("="*50)
-        print("latitude, longitude \t{0}, {1}".format(self.lat.mean(), self.lon.mean()))
+        
+        if self.is_numpy: # print means of lat/lon arrays
+            print("latitude, longitude \t{0}, {1}".format(self.lat.mean(), self.lon.mean()))
+        else:
+            print("latitude, longitude \t{0}, {1}".format(self.lat, self.lon))
+            
         print("datetime \t\t{0} (GMT)".format(self.rdt))
         print("")
         print("abs julian day \t\t{0}\t (day)".format(self.ajd))
@@ -599,8 +586,13 @@ class solar:
         print("earth obliq correction\t{0}\t (deg)".format(self.get_oblique_corr()))
         print("sun right ascension \t{0}\t (deg)".format(self.get_right_ascension()))
         print("solar declination angle {0}\t (deg)".format(self.get_declination()))
-        print("equation of time \t{0}\t (min)".format(self.get_equation_of_time()))             # solar noon
-        print("hour angle sunrise\t{0}\t (deg)".format(self.get_hour_angle_sunrise().mean()))   # sunrise
+        print("equation of time \t{0}\t (min)".format(self.get_equation_of_time()))
+        
+        if self.is_numpy: # print means of hour angle array
+            print("hour angle sunrise\t{0}\t (deg)".format(self.get_hour_angle_sunrise().mean())) 
+        else:
+            print("hour angle sunrise\t{0}\t (deg)".format(self.get_hour_angle_sunrise()))      # sunrise
+            
         print("")
         print("solar noon \t\t{0}\t (HMS - LST)".format(self.get_solar_noon()))                 # sunrise
         print("sunrise \t\t{0}\t (HMS - LST)".format(self.get_sunrise()))                       # top
@@ -608,10 +600,17 @@ class solar:
         print("sunlight durration \t{0}\t (HMS)".format(self.get_sunlight()))                   # top
         print("true solar time \t{0}\t (HMS - LST)".format(self.get_true_solar()))              # hour_angle 
         print("")
-        print("hour angle \t\t{0}\t (deg)".format(self.get_hour_angle().mean()))                # zenith
-        print("solar zenith angle \t{0}\t (deg)".format(self.get_zenith().mean()))              # elevation ang
-        print("solar elevation angle \t{0}\t (deg)".format(self.get_elevation().mean()))        # top
-        print("solar azimuth angle \t{0}\t (deg)".format(self.get_azimuth().mean()))            # top
+
+        if self.is_numpy: #print means of these array objects
+            print("hour angle \t\t{0}\t (deg)".format(self.get_hour_angle().mean()))            # zenith
+            print("solar zenith angle \t{0}\t (deg)".format(self.get_zenith().mean()))          # elevation ang
+            print("solar elevation angle \t{0}\t (deg)".format(self.get_elevation().mean()))    # top
+            print("solar azimuth angle \t{0}\t (deg)".format(self.get_azimuth().mean()))        # top
+        else:
+            print("hour angle \t\t{0}\t (deg)".format(self.get_hour_angle()))                   # zenith
+            print("solar zenith angle \t{0}\t (deg)".format(self.get_zenith()))                 # elevation ang
+            print("solar elevation angle \t{0}\t (deg)".format(self.get_elevation()))           # top
+            print("solar azimuth angle \t{0}\t (deg)".format(self.get_azimuth()))               # top
 
         print("")
         print("radiation vector \t{0}\t (AU)".format(self.get_rad_vector()))                    # earth distance
@@ -630,18 +629,13 @@ if __name__ == "__main__":
     lat         = 37
     lon         = -76.4
     sc = solar(lat, lon, tz, datestamp)
+    sc.compute_all()
 
-    start = datetime.now()
     # numpy array test
     lat         = array([[36, 36],[38,38]])
     lon         = array([[-77.4,-75.4],[-77.4,-75.4]])
-    lat         = zeros((730,730)) + 37
-    lon         = zeros((730,730)) - 76.4
     sm = solar(lat, lon, tz, datestamp)
-    finish = datetime.now()
-
-    elapsed = finish - start
-    print elapsed
+    sm.compute_all()
 
 
 
