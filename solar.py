@@ -593,29 +593,29 @@ class solar:
         print("suns eq of center \t{0}".format(self.get_sun_eq_of_center()))
         print("suns true long \t\t{0}\t (deg)".format(self.get_true_long()))
         print("suns true anom \t\t{0}\t (deg)".format(self.get_true_anom()))
-        print("radiation vector \t{0}\t (AU)".format(self.get_rad_vector()))
         print("suns apparent long \t{0}\t (deg)".format(self.get_app_long()))
         print("earth obliq mean elip \t{0}\t (deg)".format(self.get_oblique_mean_elip()))
         print("earth obliq correction\t{0}\t (deg)".format(self.get_oblique_corr()))
         print("sun right ascension \t{0}\t (deg)".format(self.get_right_ascension()))
         print("solar declination angle {0}\t (deg)".format(self.get_declination()))
-        print("equation of time \t{0}\t (min)".format(self.get_equation_of_time()))
-        print("hour angle sunrise\t{0}\t (deg)".format(self.get_hour_angle_sunrise().mean()))
+        print("equation of time \t{0}\t (min)".format(self.get_equation_of_time()))             # solar noon
+        print("hour angle sunrise\t{0}\t (deg)".format(self.get_hour_angle_sunrise().mean()))   # sunrise
         print("")
-        print("solar noon \t\t{0}\t (HMS - LST)".format(self.get_solar_noon()))
-        print("sunrise \t\t{0}\t (HMS - LST)".format(self.get_sunrise()))
-        print("sunset  \t\t{0}\t (HMS - LST)".format(self.get_sunset()))
-        print("sunlight durration \t{0}\t (HMS)".format(self.get_sunlight()))
-        print("true solar time \t{0}\t (HMS - LST)".format(self.get_true_solar()))
+        print("solar noon \t\t{0}\t (HMS - LST)".format(self.get_solar_noon()))                 # sunrise
+        print("sunrise \t\t{0}\t (HMS - LST)".format(self.get_sunrise()))                       # top
+        print("sunset  \t\t{0}\t (HMS - LST)".format(self.get_sunset()))                        # top
+        print("sunlight durration \t{0}\t (HMS)".format(self.get_sunlight()))                   # top
+        print("true solar time \t{0}\t (HMS - LST)".format(self.get_true_solar()))              # hour_angle 
         print("")
-        print("hour angle \t\t{0}\t (deg)".format(self.get_hour_angle().mean()))
-        print("solar zenith angle \t{0}\t (deg)".format(self.get_zenith().mean()))
-        print("solar elevation angle \t{0}\t (deg)".format(self.get_elevation().mean()))
-        print("solar azimuth angle \t{0}\t (deg)".format(self.get_azimuth().mean()))
+        print("hour angle \t\t{0}\t (deg)".format(self.get_hour_angle().mean()))                # zenith
+        print("solar zenith angle \t{0}\t (deg)".format(self.get_zenith().mean()))              # elevation ang
+        print("solar elevation angle \t{0}\t (deg)".format(self.get_elevation().mean()))        # top
+        print("solar azimuth angle \t{0}\t (deg)".format(self.get_azimuth().mean()))            # top
 
         print("")
-        print("earth sun distance \t{0}(m)".format(self.get_earth_distance()))
-        print("norm irradiance \t{0}\t (W/m*m)".format(self.get_norm_irradiance()))
+        print("radiation vector \t{0}\t (AU)".format(self.get_rad_vector()))                    # earth distance
+        print("earth sun distance \t{0}(m)".format(self.get_earth_distance()))                  # norm irrad
+        print("norm irradiance \t{0}\t (W/m*m)".format(self.get_norm_irradiance()))             # top
         print("="*50)
 
 
@@ -634,8 +634,8 @@ if __name__ == "__main__":
     # numpy array test
     lat         = array([[36, 36],[38,38]])
     lon         = array([[-77.4,-75.4],[-77.4,-75.4]])
-    lat         = zeros((7300,7300)) + 37
-    lon         = zeros((7300,7300)) - 76.4
+    lat         = zeros((730,730)) + 37
+    lon         = zeros((730,730)) - 76.4
     sm = solar(lat, lon, tz, datestamp)
     finish = datetime.now()
 
