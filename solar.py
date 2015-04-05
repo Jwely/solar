@@ -11,6 +11,7 @@ __author__ = ["Jeffry Ely, Jeff.ely.08@gmail.com"]
 from datetime import datetime, timedelta
 from numpy import *
 
+    
 class solar:
     """
     Object class for handling solar calculations. Many equations are taken from the
@@ -44,7 +45,7 @@ class solar:
        be skipped all together.
 
     present performance:
-    To process about one landsat tile (7300 square) requires 9GB of memory and takes
+    To process about one landsat tile (7300^2 matrix) requires 9GB of memory and takes
     45 seconds to process on a single 3.3GHz thread. It would be nice to get the same output
     to run on ~5GB of memory so a 8GB system could handle it. Further improvements could allow
     the image to be split into chunks and either A) run in series to keep memory consumption low
