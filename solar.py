@@ -619,9 +619,11 @@ class solar:
         print("="*50)
 
 
+# testing
 if __name__ == "__main__":
 
 
+    # use the current time and my time zone
     tz          = -4
     datestamp   = datetime.now()
     
