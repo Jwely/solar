@@ -3,7 +3,7 @@ solar object class, built in my spare time for a personal project.
 
 
 Distributed with the dnppy module, with permission from its original
-author, Jeffry Ely.
+author, Jeff Ely.
 """
 
 
