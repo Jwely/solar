@@ -20,14 +20,48 @@ class solar:
 
     It requires a physical location on the earth and a datetime object
 
-    Inputs:
-        lat             lattitude (+ to N)
-        lon             longitude (+ to E)
-        time_zone       integer such as (-5) for eastern time (+ to E)
-        date_time_obj   local time datetime object, may be datestamp with matching fmt
-        fmt             format for interpreting "date_time_obj" if it is of string type
-        slope           numpy array, slope of land at lat,lon for solar energy calculations
-        aspect          numpy array, aspect of land at lat,lon for solar energy calculations
+    Inputs: 
+        lat             decimal degrees latitude (float OR numpy array)
+        lon             decimal degrees longitude (float OR numpy array)
+        time_zone       float of time shift from GMT (such as "-5" for EST)
+        date_time_obj   either a timestamp string following fmt or a datetime obj
+        fmt             if date_time_obj is a string, fmt is required to interpret it
+        slope           slope of land at lat,lon for solar energy calculations
+        aspect          aspect of land at lat,lon for solar energy calculations
+
+    An instance of this class may have the following atributes:
+        lat                 latitude                                    (array)
+        lon                 longitude                                   (array)
+        tz                  time zone                                   (scalar)
+        rdt                 reference datetime object (date_time_obj)   (scalar)
+        ajd                 absolute julian day                         (scalar)
+        ajc                 absolute julian century                     (scalar)
+        geomean_long        geometric mean longitude of the sun         (scalar)
+        geomean_anom        geometric mean longitude anomaly of the sun (scalar)
+        earth_eccent        eccentricity of earths orbit                (scalar)
+        sun_eq_of_center    the suns equation of center                 (scalar)
+        true_long           true longitude of the sun                   (scalar)
+        true_anom           true longitude anomaly of the sun           (scalar)
+        app_long            the suns apparent longitude                 (scalar)
+        oblique_mean_elip   earth oblique mean elipse                   (scalar)
+        oblique_corr        correction to earths oblique elipse         (scalar)
+        right_ascension     suns right ascension angle                  (scalar)
+        declination         solar delination angle                      (scalar)
+        equation_of_time    equation of time (minutes)                  (scalar)
+        hour_angle_sunrise  the hour angle at sunrise                   (array)
+        solar_noon          LST of solar noon                           (array)
+        sunrise             LST of sunrise time                         (array)
+        sunset              LST of sunset time                          (array)
+        sunlight            LST fractional days of sunlight             (array)
+        true_solar          LST for true solar time                     (array)
+        hour_angle          total hour angle                            (array)
+        zenith              zenith angle                                (array)
+        elevation           elevation angle                             (array)
+        azimuth             azimuthal angle                             (array)
+        rad_vector          radiation vector (distance in AU)           (scalar)
+        earth_distance      earths distance to sun in meters            (scalar)
+        norm_irradiance     incident solar energy at earth distance     (scalar)
+
 
     Units used by this class unless otherwise labled:
         angle    = degrees
@@ -45,64 +79,18 @@ class solar:
        to be saved to disk and then removed from memory, and other unneeded values to
        be skipped all together.
 
-    present performance:
+    Present performance:
     To process about one landsat tile (7300^2 matrix) requires 9GB of memory and takes
     45 seconds to process on a single 3.3GHz thread. It would be nice to get the same output
-    to run on ~5GB of memory so a 8GB system could handle it. Further improvements could allow
-    the image to be split into chunks and either A) run in series to keep memory consumption low
-    or B) run in parallel to decrease processing time.
+    to run on ~5GB of memory so a 8GB system could handle it.
     """
+    
 
-    def __init__(self, lat, lon, time_zone, date_time_obj,
+    def __init__(self, lat, lon, date_time_obj, time_zone = 0,
                          fmt = False, slope = None, aspect = None):
         """
-        initializes critical spatial and temporal information
-
-        Inputs: 
-            lat             decimal degrees latitude
-            lon             decimal degrees longitude
-            time_zone       float of time shift from GMT (such as "-5" for EST)
-            date_time_obj   either a timestamp string following fmt or a datetime obj
-            fmt             if date_time_obj is a string, fmt is required to interpret it
-            slope           slope of land at lat,lon for solar energy calculations
-            aspect          aspect of land at lat,lon for solar energy calculations
-
-        Referencable Attributes:
-            lat                 latitude                                    (array)
-            lon                 longitude                                   (array)
-            tz                  time zone                                   (scalar)
-            rdt                 reference datetime object (date_time_obj)   (scalar)
-            ajd                 absolute julian day                         (scalar)
-            ajc                 absolute julian century                     (scalar)
-            geomean_long        geometric mean longitude of the sun         (scalar)
-            geomean_anom        geometric mean longitude anomaly of the sun (scalar)
-            earth_eccent        eccentricity of earths orbit                (scalar)
-            sun_eq_of_center    the suns equation of center                 (scalar)
-            true_long           true longitude of the sun                   (scalar)
-            true_anom           true longitude anomaly of the sun           (scalar)
-            app_long            the suns apparent longitude                 (scalar)
-            oblique_mean_elip   earth oblique mean elipse                   (scalar)
-            oblique_corr        correction to earths oblique elipse         (scalar)
-            right_ascension     suns right ascension angle                  (scalar)
-            declination         solar delination angle                      (scalar)
-            equation_of_time    equation of time (minutes)                  (scalar)
-            hour_angle_sunrise  the hour angle at sunrise                   (array)
-            solar_noon          LST of solar noon                           (array)
-            sunrise             LST of sunrise time                         (array)
-            sunset              LST of sunset time                          (array)
-            sunlight            LST fractional days of sunlight             (array)
-            true_solar          LST for true solar time                     (array)
-            hour_angle          total hour angle                            (array)
-            zenith              zenith angle                                (array)
-            elevation           elevation angle                             (array)
-            azimuth             azimuthal angle                             (array)
-            rad_vector          radiation vector (distance in AU)           (scalar)
-            earth_distance      earths distance in meters                   (scalar)
-            norm_irradiance     incident solar energy at earth distance     (scalar)
+        Initializes critical spatial and temporal information for solar object.
         """
-
-        # initialized attributes
-        self.tz = time_zone
         
         # Constants as attributes
         self.sun_surf_rad   = 63156942.6        # radiation at suns surface (W/m^2)
@@ -112,12 +100,11 @@ class solar:
 
 
         # sets up the object with some subfunctions
-        self.set_datetime(date_time_obj, fmt)
+        self.set_datetime(date_time_obj, fmt, GMT_hour_offset = time_zone)
         self.set_location(lat, lon)
-        self.set_timezone(time_zone)
 
 
-        # compute solar attributes
+        # specify if attributes are scalar floats or numpy arrays
         if isinstance(lat, ndarray) and isinstance(lon, ndarray):
             self.is_numpy   = True
         else:
@@ -126,7 +113,7 @@ class solar:
         return
     
 
-    def set_datetime(self, date_time_obj, fmt = False):
+    def set_datetime(self, date_time_obj, fmt = False, GMT_hour_offset = 0):
         """
         sets the critical time information
 
@@ -135,13 +122,16 @@ class solar:
 
         # if input is datetime_obj set it
         if isinstance(date_time_obj, datetime):
-            self.rdt = date_time_obj
+            self.rdt =      date_time_obj
+            self.rdt +=     timedelta(hours = -GMT_hour_offset)
 
         elif isinstance(date_time_obj, str) and isinstance(fmt, str):
-            self.rdt = datetime.strptime(date_time_obj,fmt)
+            self.rdt =      datetime.strptime(date_time_obj,fmt)
+            self.rdt +=     timedelta(hours = -GMT_hour_offset)
         else:
             raise Exception("bad datetime!")
 
+        self.tz = GMT_hour_offset
         self.abs_julian()
         
         return
@@ -171,19 +161,6 @@ class solar:
         self.lon    = lon           # longitude (N positive)- float
         self.lat_r  = radians(lat)  # lattitude in radians
         self.lon_r  = radians(lon)  # longitude in radians
-        return
-
-
-    def set_timezone(self, GMT_hour_offset):
-        """ amends the datetime object with time zone information"""
-
-        # sets time zone in a way to prevent accidental repeated offsetting
-        if self.tz != GMT_hour_offset:
-            time_del = timedelta(hours = (self.tz - GMT_hour_offset))
-            self.rdt = self.rdt + time_del
-            self.tz  = GMT_hour_offset
-
-        self.abs_julian()
         return
 
 
@@ -555,6 +532,8 @@ class solar:
         with adjustments for slope and aspect if they have been given.
         """
 
+        print("this function is unfinished!")
+
         return
 
 
@@ -570,8 +549,9 @@ class solar:
             print("latitude, longitude \t{0}, {1}".format(self.lat.mean(), self.lon.mean()))
         else:
             print("latitude, longitude \t{0}, {1}".format(self.lat, self.lon))
-            
+
         print("datetime \t\t{0} (GMT)".format(self.rdt))
+        print("time zone \t\t{0} (GMT offset)".format(self.tz))
         print("")
         print("abs julian day \t\t{0}\t (day)".format(self.ajd))
         print("abs julian century \t{0}\t (cen)".format(self.ajc))
@@ -624,19 +604,21 @@ if __name__ == "__main__":
 
 
     # use the current time and my time zone
-    tz          = -4
+    tz          = -5
     datestamp   = datetime.now()
     
     # scalar test
-    lat         = 37
-    lon         = -76.4
-    sc = solar(lat, lon, tz, datestamp)
+    lat = 37
+    lon = -76.4
+    sc  = solar(lat, lon, datestamp, tz)
+    
     sc.compute_all()
 
     # numpy array test
-    lat         = array([[36, 36],[38,38]])
-    lon         = array([[-77.4,-75.4],[-77.4,-75.4]])
-    sm = solar(lat, lon, tz, datestamp)
+    lat = array([[36, 36],[38,38]])
+    lon = array([[-77.4,-75.4],[-77.4,-75.4]])
+    sm  = solar(lat, lon, datestamp, tz)
+    
     sm.compute_all()
 
 
