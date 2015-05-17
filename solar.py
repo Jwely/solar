@@ -109,9 +109,9 @@ class solar:
         self.geomean_long       = None
         self.hour_angle         = None
         self.hour_angle_sunrise = None
-        self.lat                = lat           # lattitude (E positive)- float
+        self.lat                = lat           # lattitude (N positive)- float
         self.lat_r              = radians(lat)  # lattitude in radians
-        self.lon                = lon           # longitude (N positive)- float
+        self.lon                = lon           # longitude (E positive)- float
         self.lon_r              = radians(lon)  # longitude in radians
         self.norm_irradiance    = None
         self.oblique_corr       = None
@@ -170,11 +170,14 @@ class solar:
         elif isinstance(date_time_obj, str) and isinstance(fmt, str):
             self.rdt =      datetime.strptime(date_time_obj,fmt)
             self.rdt +=     timedelta(hours = -GMT_hour_offset)
+            
+        elif isinstance(date_time_obj, str) and fmt == False:
+            raise ValueError("Must input value for 'fmt' to interpret string datetime")
+        
         else:
-            raise Exception("bad datetime!")
+            raise ValueError("Could not interpret datetime!")
 
         self.tz = GMT_hour_offset
-
 
         # uses the reference day of january 1st 2000
         jan_1st_2000_jd   = 2451545
@@ -677,8 +680,13 @@ class solar:
         """ computes and prints all the attributes of this solar object"""
 
         print("="*50)
-        print("Interogation of entire matrix of points.")
-        print("Some values displayed below are spatial averages")
+        
+        if self.is_numpy:
+            print("List of attribute values for entire matrix of points")
+            print("Some values displayed below are spatial averages")
+        else:
+            print("List of attributes and values")
+        
         print("="*50)
         
         if self.is_numpy: # print means of lat/lon arrays
@@ -740,20 +748,22 @@ if __name__ == "__main__":
 
     
     # use the current time and my time zone
-    tz          = -5
-    datestamp   = datetime.now()
-    fmt         = 2
     
-    # scalar test
-    lat = 37
-    lon = -76.4
-    sc  = solar(lat, lon, datestamp, tz)
+    datestamp   = "20150515-120000"     # date stamp
+    fmt         = "%Y%m%d-%H%M%S"       # datestamp format
+    tz          = -4                    # timezone (GMT) offset
+    lat = 37                            # lat (N positive)
+    lon = -76.4                         # lon (E positive)
+    
+    sc  = solar(lat, lon, datestamp, tz, fmt)
+    sc.compute_all()
 
+    
     # numpy array test
     import numpy
     lat = numpy.array([[36, 36],[38,38]])
     lon = numpy.array([[-77.4,-75.4],[-77.4,-75.4]])
-    sm  = solar(lat, lon, datestamp, tz)
+    sm  = solar(lat, lon, datestamp, tz, fmt)
     
     sm.compute_all()
     
