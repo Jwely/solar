@@ -6,8 +6,3 @@ For starters, it replicates the functionality of the NOAA calculator found here:
 [http://www.esrl.noaa.gov/gmd/grad/solcalc/calcdetails.html]
 
 It has recently been updated to allow calculations for all points within a numpy array (lat,lon)
-
-It was produced in my free time as part of a personal project of mine, but clearly has some utility in the dnppy module. 
-It is distributed as part of the dnppy module with permission of the original author.
-
-
