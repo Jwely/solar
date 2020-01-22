@@ -1,8 +1,49 @@
 import numpy as np
+from datetime import timedelta
 
-from solar import Numeric, DateTime
 from solar import solar_fn as sfn
-from solar.util import vec_timedelta
+from solar import FlexNum, FlexDate
+
+
+def _vec_timedelta(**kwargs):
+    """
+    Just like datetimes timedelta method, but will return numpy arrays of
+    timedelta objects for vectorized inputs. kwargs are exactly as those
+    supported by timedelta, and all argument inputs may be either singular
+    int, float, or ndarrays with dtype int or float.
+
+    for example:
+
+        td_array = vec_timedelta(days=np.array(range(1,366))
+        returns a numpy array of timedelta objects for between 1 and 365
+        days
+    """
+
+    # all arguments may be vectors, but must be the same shape!
+    if len(kwargs) > 1:
+        if not all([v1.shape == v2.shape for v1 in kwargs.values() for v2 in kwargs.values()]):
+            raise Exception(
+                "If vectorized arguments are used, they must all be "
+                "identical shapes, got [{}]".format(
+                    ",".join(
+                        ["{}=({})".format(k, len(v)) for k, v in kwargs.items()]
+                    )))
+
+    # argument type conditioning
+    is_vec = False
+    for k, v in kwargs.items():
+        if isinstance(v, np.ndarray):
+            is_vec = True
+            kwargs[k] = kwargs[k].astype(dtype=float)
+
+    # produce vectorized version of timedelta.
+    vf = np.vectorize(timedelta)
+
+    # return the appropriate one
+    if is_vec:
+        return vf(**kwargs)
+    else:
+        return timedelta(**kwargs)
 
 
 class SolarCalculator(object):
@@ -45,6 +86,8 @@ class SolarCalculator(object):
         zenith                  zenith angle                                (array)
         elevation               elevation angle                             (array)
         azimuth                 azimuthal angle                             (array)
+        norm_surf_irradiance    incident energy on earths surface           (array)
+        surface_par             photosynthetically active radiation         (array)
         rad_vector              radiation vector (distance in AU)           (scalar)
         earth_distance          earths distance to sun in meters            (scalar)
         norm_irradiance         incident solar energy at earth distance     (scalar)
@@ -57,8 +100,9 @@ class SolarCalculator(object):
     """
 
     # TODO: More precise shape descriptions, space and time variant support has
-    # TODO: made the expected behavior slightly more complex.
-    def __init__(self, lat: Numeric, lon: Numeric, dt: DateTime, low_mem=False):
+    #     # TODO: made the expected behavior slightly more complex.
+    def __init__(self, lat: FlexNum, lon: FlexNum, dt: FlexDate,
+                 slope: FlexNum = None, aspect: FlexNum = None, low_mem=False):
         """
         Accepts vectorized positions for lat and lon, (use meshgrid) and/or list of
         multiple datetimes. Computations are fully vectorized
@@ -70,6 +114,12 @@ class SolarCalculator(object):
                         will recompute all values including intermediates every time.
                         Use for very large vector spaces.
         """
+
+        if slope is not None:
+            raise NotImplementedError(f"'slope' argument not yet supported")
+
+        if aspect is not None:
+            raise NotImplementedError(f"'aspect' argument not yet supported")
 
         self.low_mem = low_mem  # if True, do not save intermediate computations
 
@@ -89,7 +139,7 @@ class SolarCalculator(object):
 
 # = input checks and properties of the class
     @staticmethod
-    def _coerce_dims(lat: Numeric, lon: Numeric, dt: DateTime):
+    def _coerce_dims(lat: FlexNum, lon: FlexNum, dt: FlexDate):
         """
         Ensures that input lat, lon, and dt arguments are dimensionally compatible.
 
@@ -136,8 +186,6 @@ class SolarCalculator(object):
         return self._space_is_vec
 
 # = function decorators and meta handlers
-    # TODO: this was not a wise design choice.
-    #       greatly worsens readability to save some lines.
     def _ref(self, function, attribute, *args, **kwargs):
         """
         decorator to check the given attribute for the result of a function first,
@@ -294,6 +342,10 @@ class SolarCalculator(object):
         return self._ref(sfn.get_elevation, "_elevation",
                          self.zenith())
 
+    def elevation_noatmo(self):
+        return self._ref(sfn.get_elevation_noatmo, "_elevation_noatmo",
+                         self.zenith())
+
     def azimuth(self):
         return self._ref(sfn.get_azimuth, "_azimuth",
                          self.lat_rad(), self.declination(), self.hour_angle(), self.zenith())
@@ -306,21 +358,33 @@ class SolarCalculator(object):
         return self._ref(sfn.get_norm_irradiance, "_norm_irradiance",
                          self.earth_distance())
 
+    def norm_surf_irradiance_noatmo(self):
+        return self._ref(sfn.get_norm_surf_irradiance, "_norm_surf_irradiance_noatmo",
+                         self.elevation_noatmo(), self.norm_irradiance())
+
+    def norm_surf_irradiance(self):
+        return self._ref(sfn.get_norm_surf_irradiance, "_norm_surf_irradiance",
+                         self.elevation(), self.norm_irradiance())
+
+    def surface_par(self):
+        return self._ref(sfn.get_surface_par, "_surface_par",
+                         self.norm_surf_irradiance_noatmo())
+
 # = formatted
     def solar_noon_time(self):
-        return self._ref(vec_timedelta, '_solar_noon_time',
+        return self._ref(_vec_timedelta, '_solar_noon_time',
                          days=self.solar_noon())
 
     def sunlight_time(self):
-        return self._ref(vec_timedelta, '_sunlight_time',
+        return self._ref(_vec_timedelta, '_sunlight_time',
                          days=self.sunlight())
 
     def sunrise_time(self):
-        return self._ref(vec_timedelta, '_sunrise_time',
+        return self._ref(_vec_timedelta, '_sunrise_time',
                          days=self.sunrise())
 
     def sunset_time(self):
-        return self._ref(vec_timedelta, '_sunset_time',
+        return self._ref(_vec_timedelta, '_sunset_time',
                          days=self.sunset())
 
 # = compute all
@@ -349,11 +413,6 @@ class SolarCalculator(object):
                 #         f, str(np.median(result)), len(result)))
                 else:
                     print("{:26s}{}".format(f, result))
-
-
-
-
-
 
 
 

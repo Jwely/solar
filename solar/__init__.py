@@ -71,9 +71,13 @@ class Constants(object):
         self.orbital_period = 365.2563630  # num of days it takes earth to revolve
         self.altitude = -0.01448623  # altitude of center of solar disk
 
+        # photosynthetic constants
+        self.etta_photon = 4.56  # micro mol / J
+        self.etta_par = 0.368  # fraction of 5800K black body solar radiation that is photosynthetically active (W/W)
+
 
 CONSTANTS = Constants()
 
 # condense verbose type hints for vectorized or scalar inputs.
-Numeric = Union[float, int, np.ndarray]
-DateTime = Union[datetime, List[datetime]]
+FlexNum = Union[float, int, np.ndarray]
+FlexDate = Union[datetime, List[datetime]]

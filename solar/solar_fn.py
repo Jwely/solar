@@ -1,11 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Tuple
 
 import numpy as np
 from numpy.core.umath import radians, sin, cos, degrees, arctan2, arcsin, tan, arccos
-
-from solar import Numeric, DateTime
-from solar import CONSTANTS
+from solar import FlexNum, FlexDate, CONSTANTS
 
 """
 Every function in this module accepts scalar or vectorized inputs.
@@ -14,7 +12,7 @@ simply, without complex shaping and reshaping.
 """
 
 
-def get_absolute_julian_day_and_century(reference_datetime: DateTime) -> Tuple[Numeric, Numeric]:
+def get_absolute_julian_day_and_century(reference_datetime: FlexDate) -> Tuple[FlexNum, FlexNum]:
     """ computes absolute julian day and century from some UTC datetime """
 
     # self reference if reference_datetime is a list
@@ -39,21 +37,21 @@ def get_absolute_julian_day_and_century(reference_datetime: DateTime) -> Tuple[N
     return ajd, ajc
 
 
-def get_geomean_long(ajc: Numeric):
+def get_geomean_long(ajc: FlexNum):
     """ calculates geometric mean longitude of the sun"""
 
     geomean_long = (280.46646 + ajc * (36000.76983 + ajc * 0.0003032)) % 360
     return geomean_long
 
 
-def get_geomean_anom(ajc: Numeric):
+def get_geomean_anom(ajc: FlexNum):
     """calculates the geometric mean anomoly of the sun"""
 
     geomean_anom = (357.52911 + ajc * (35999.05029 - 0.0001537 * ajc))
     return geomean_anom
 
 
-def get_earth_eccent(ajc: Numeric):
+def get_earth_eccent(ajc: FlexNum):
     """
     Calculates the precise eccentricity of earths orbit at ref_datetime
     """
@@ -61,8 +59,8 @@ def get_earth_eccent(ajc: Numeric):
     return earth_eccent
 
 
-def get_sun_eq_of_center(ajc: Numeric,
-                         geomean_anom: Numeric):
+def get_sun_eq_of_center(ajc: FlexNum,
+                         geomean_anom: FlexNum):
     """calculates the suns equation of center"""
 
     gma = radians(geomean_anom)
@@ -74,23 +72,23 @@ def get_sun_eq_of_center(ajc: Numeric,
     return sun_eq_of_center
 
 
-def get_true_long(geomean_long: Numeric,
-                  sun_eq_of_center: Numeric):
+def get_true_long(geomean_long: FlexNum,
+                  sun_eq_of_center: FlexNum):
     """ calculates the tru longitude of the sun"""
 
     true_long = geomean_long + sun_eq_of_center
     return true_long
 
 
-def get_true_anom(geomean_anom: Numeric,
-                  sun_eq_of_center: Numeric):
+def get_true_anom(geomean_anom: FlexNum,
+                  sun_eq_of_center: FlexNum):
     """ calculates the true anomoly of the sun"""
     true_anom = geomean_anom + sun_eq_of_center
     return true_anom
 
 
-def get_rad_vector(earth_eccent: Numeric,
-                   true_anom: Numeric):
+def get_rad_vector(earth_eccent: FlexNum,
+                   true_anom: FlexNum):
     """ calculates incident radiation vector to surface at ref_datetime (AUs)"""
 
     ec = earth_eccent
@@ -100,22 +98,22 @@ def get_rad_vector(earth_eccent: Numeric,
     return rad_vector
 
 
-def get_app_long(true_long: Numeric,
-                 ajc: Numeric):
+def get_app_long(true_long: FlexNum,
+                 ajc: FlexNum):
     """ calculates apparent longitude of the sun"""
     app_long = true_long - 0.00569 - 0.00478 * sin(radians(125.04 - 1934.136 * ajc))
     return app_long
 
 
-def get_oblique_mean_ellipse(ajc: Numeric):
+def get_oblique_mean_ellipse(ajc: FlexNum):
     """ calculates the oblique mean eliptic of earth orbit """
 
     oblique_mean_ellipse = 23 + (26 + (21.448 - ajc * (46.815 + ajc * (0.00059 - ajc * 0.001813))) / 60) / 60
     return oblique_mean_ellipse
 
 
-def get_oblique_corr(ajc: Numeric,
-                     oblique_mean_ellipse: Numeric):
+def get_oblique_corr(ajc: FlexNum,
+                     oblique_mean_ellipse: FlexNum):
     """ calculates the oblique correction """
 
     ome = oblique_mean_ellipse
@@ -124,8 +122,8 @@ def get_oblique_corr(ajc: Numeric,
     return oblique_corr
 
 
-def get_right_ascension(app_long: Numeric,
-                        oblique_corr: Numeric):
+def get_right_ascension(app_long: FlexNum,
+                        oblique_corr: FlexNum):
     """ calculates the suns right ascension angle """
 
     sal = radians(app_long)
@@ -135,8 +133,8 @@ def get_right_ascension(app_long: Numeric,
     return right_ascension
 
 
-def get_declination(app_long: Numeric,
-                    oblique_corr: Numeric):
+def get_declination(app_long: FlexNum,
+                    oblique_corr: FlexNum):
     """ solar declination angle at ref_datetime"""
 
     sal = radians(app_long)
@@ -146,10 +144,10 @@ def get_declination(app_long: Numeric,
     return declination
 
 
-def get_equation_of_time(oblique_corr: Numeric,
-                         geomean_long: Numeric,
-                         geomean_anom: Numeric,
-                         earth_eccent: Numeric):
+def get_equation_of_time(oblique_corr: FlexNum,
+                         geomean_long: FlexNum,
+                         geomean_anom: FlexNum,
+                         earth_eccent: FlexNum):
     """ calculates the equation of time in minutes """
 
     oc = radians(oblique_corr)
@@ -168,8 +166,8 @@ def get_equation_of_time(oblique_corr: Numeric,
     return equation_of_time
 
 
-def get_hour_angle_sunrise(declination: Numeric,
-                           lat_r: Numeric):
+def get_hour_angle_sunrise(declination: FlexNum,
+                           lat_r: FlexNum):
     """ calculates the hour angle of sunrise """
 
     d = radians(declination)
@@ -180,8 +178,8 @@ def get_hour_angle_sunrise(declination: Numeric,
     return hour_angle_sunrise
 
 
-def get_solar_noon(lon: Numeric,
-                   equation_of_time: Numeric,
+def get_solar_noon(lon: FlexNum,
+                   equation_of_time: FlexNum,
                    tz=0):
     """ calculates solar noon in (local sidereal time LST)"""
 
@@ -191,8 +189,8 @@ def get_solar_noon(lon: Numeric,
     return solar_noon
 
 
-def get_sunrise(solar_noon: Numeric,
-                hour_angle_sunrise: Numeric):
+def get_sunrise(solar_noon: FlexNum,
+                hour_angle_sunrise: FlexNum):
     """ calculates the time of sunrise"""
 
     sn = solar_noon
@@ -202,8 +200,8 @@ def get_sunrise(solar_noon: Numeric,
     return sunrise
 
 
-def get_sunset(solar_noon: Numeric,
-               hour_angle_sunrise: Numeric):
+def get_sunset(solar_noon: FlexNum,
+               hour_angle_sunrise: FlexNum):
     """ calculates the time of sunrise"""
 
     sn = solar_noon
@@ -213,17 +211,16 @@ def get_sunset(solar_noon: Numeric,
     return sunset
 
 
-def get_sunlight(hour_angle_sunrise: Numeric):
+def get_sunlight(hour_angle_sunrise: FlexNum):
     """ calculates amount of daily sunlight in fractional days"""
 
     sunlight = 8 * hour_angle_sunrise / (60 * 24)
     return sunlight
 
 
-def get_true_solar(lon: Numeric,
-                   equation_of_time: Numeric,
-                   reference_datetime: DateTime,
-                   tz=0):
+def get_true_solar(lon: FlexNum,
+                   equation_of_time: FlexNum,
+                   reference_datetime: FlexDate):
     """ calculates the true solar time at ref_datetime"""
 
     eot = equation_of_time
@@ -239,18 +236,18 @@ def get_true_solar(lon: Numeric,
         raise TypeError("expected reference_datetime to be datetime or "
                         "list of datetimes. got {}".format(type(reference_datetime)))
 
-    frac_hr = frac_sec / (60 * 60) + tz
+    frac_hr = frac_sec / (60 * 60)
     frac_day = frac_hr / 24
 
     frac_day = frac_day
 
     # now get true solar time
-    true_solar = (frac_day * 1440 + eot + 4 * lon - 60 * tz) % 1440
+    true_solar = (frac_day * 1440 + eot + 4 * lon) % 1440
 
     return true_solar
 
 
-def get_hour_angle(true_solar: Numeric):
+def get_hour_angle(true_solar: FlexNum):
     """ calculates the hour angle at ref_datetime"""
 
     ts = true_solar
@@ -272,9 +269,9 @@ def get_hour_angle(true_solar: Numeric):
     return hour_angle
 
 
-def get_zenith(declination: Numeric,
-               hour_angle: Numeric,
-               lat_r: Numeric):
+def get_zenith(declination: FlexNum,
+               hour_angle: FlexNum,
+               lat_r: FlexNum):
     """ calculates solar zenith angle at ref_datetime"""
 
     d = radians(declination)
@@ -285,7 +282,12 @@ def get_zenith(declination: Numeric,
     return zenith
 
 
-def get_elevation(zenith: Numeric):
+def get_elevation_noatmo(zenith: FlexNum):
+    """ solar elevation angle without atmospheric correction """
+    return 90.0 - zenith
+
+
+def get_elevation(zenith: FlexNum):
     """ calculates solar elevation angle at ref_datetime"""
 
     # perform an approximate atmospheric refraction correction
@@ -327,10 +329,10 @@ def get_elevation(zenith: Numeric):
 
 
 def get_azimuth(
-        lat_r: Numeric,
-        declination: Numeric,
-        hour_angle: Numeric,
-        zenith: Numeric) -> Numeric:
+        lat_r: FlexNum,
+        declination: FlexNum,
+        hour_angle: FlexNum,
+        zenith: FlexNum) -> FlexNum:
     """
     calculates solar azimuth angle. Function requires special treatment
     of different cases of combine vectorize inputs
@@ -460,7 +462,17 @@ def get_azimuth(
     return azimuth
 
 
-def get_earth_distance(rad_vector: Numeric):
+def get_sun_vector_cartesian(elevation: FlexNum, azimuth: FlexNum):
+    """
+    Returns a vector pointing directly at the sun, from the surface on the earth, in cartesian coordinates.
+        x axis = east positive, west negative
+        y axis = north positive, south negative
+        z axis = normal to earths surface.
+    """
+    pass
+
+
+def get_earth_distance(rad_vector: FlexNum):
     """ distance between the earth and the sun at ref_datetime"""
 
     # convert rad_vector length from AU to meters
@@ -469,7 +481,7 @@ def get_earth_distance(rad_vector: Numeric):
     return earth_distance
 
 
-def get_norm_irradiance(earth_distance: Numeric):
+def get_norm_irradiance(earth_distance: FlexNum):
     """
     calculates incoming solar energy in W/m^2 to a surface normal to the sun
 
@@ -489,3 +501,32 @@ def get_norm_irradiance(earth_distance: Numeric):
 
     return norm_irradiance
 
+
+def get_norm_surf_irradiance(elevation: FlexNum, norm_irradiance: FlexNum):
+    """
+    computes the incident solar radiation intensity (w/m^2) on a flat surface on earth.
+    (simple 2d case) No aspect correction!
+
+    NOTE: Can be used with elevation or elevation_noatmo. Using elevation with atmospheric
+    correction can introduce discontinuities that might be undesired.
+
+    TODO: Add aspect support for this method.
+    """
+
+    e_r = radians(elevation)
+    srf = sin(e_r) * norm_irradiance
+
+    # set negative values to zero.
+    if isinstance(elevation, np.ndarray) and elevation.shape:
+        srf[srf <= 0] = 0
+        return srf
+    else:
+        return max([srf, 0.0])
+
+
+def get_surface_par(norm_surf_irradiance: FlexNum):
+    """
+    photosynthetically active radiation flux
+    NOTE: using atmospheric surface irradiance creates discontinuities.
+    """
+    return norm_surf_irradiance * CONSTANTS.etta_par
