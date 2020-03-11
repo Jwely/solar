@@ -47,7 +47,8 @@ Table of variable descriptions
     azimuth                 azimuthal angle                             (array)
     rad_vector              radiation vector (distance in AU)           (scalar)
     earth_distance          earths distance to sun in meters            (scalar)
-    norm_irradiance         incident solar energy at earth distance     (scalar)
+    sun_norm_irradiance     incident solar energy at earth distance     (scalar)
+    surf_norm_irradiance    incident energy to surface
 
 Units unless otherwise labeled.
     angle    = degrees
@@ -70,6 +71,10 @@ class Constants(object):
         self.sun_radius = 695800000.  # radius of the sun in meters
         self.orbital_period = 365.2563630  # num of days it takes earth to revolve
         self.altitude = -0.01448623  # altitude of center of solar disk
+
+        # solar energy constants
+        self.earth_radius = 6371000  # radius of simple spherical earth (m)
+        self.atm_height = 9000       # effective height of atmosphere
 
         # photosynthetic constants
         self.etta_photon = 4.56  # micro mol / J

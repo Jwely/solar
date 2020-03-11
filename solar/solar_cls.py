@@ -1,5 +1,7 @@
 import numpy as np
 from datetime import timedelta
+from typing import Tuple, Dict
+import pandas as pd
 
 from solar import solar_fn as sfn
 from solar import FlexNum, FlexDate
@@ -46,186 +48,242 @@ def _vec_timedelta(**kwargs):
         return timedelta(**kwargs)
 
 
+def store_value(store: Dict):  # decorator factory
+    """
+    Decorator to intercept class method calls. If this method has already been
+    called, it's result will be stored in the store dictionary. On subsequent
+    calls the same result will be returned.
+
+    A special access count key is used to store a dictionary of the number of
+    times each of the keys has been accessed. A curious tidbit for performance
+    profiling.
+
+    NOTE: the store_value is in a separate dictionary, not directly
+    against class attributes.
+
+    TODO WARNING: This obviously comes with great assumptions of input param immutability.
+        Any attributed stored in the store_value dict is inherently inconvenient to access
+        and is *unlikely* to be mutated by accident. However, measures must be taken to prevent
+        mutation of __init__ params.
+
+    """
+    access_counts = "__access_counts"
+    if access_counts not in store.keys():
+        store[access_counts] = dict()
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            vs_name = f"{func.__name__}"
+            if vs_name in store.keys():
+                # return existing value
+                result = store[vs_name]
+                store[access_counts][vs_name] += 1
+            else:
+                # compute , store, and return
+                result = func(*args, **kwargs)
+                store[vs_name] = result
+                store[access_counts][vs_name] = 1
+            return result
+        return wrapper
+    return decorator
+
+
 class SolarCalculator(object):
     """
-    Chains solar equations as needed, saving intermediates as attributes of this class.
+    Handles common solar calculations commonly needed for energy balance equation work,
+    from evapotranspirative and photosynthesis modelling to photovoltaic performance
+    profiling.
+
+    Intended to scale moderately and flexibly for high dimensionality problems. Any
+    combination scalar, 1d, or 2d space parameters and scalar or 1d time parameters may
+    be used: for up to 3 dimensions of simultaneous computation.
+
+    Time dimensionality:
+        scalar:
+            a single reference datetime input 'dt'.
+        1d:
+            a list of datetime values covering multiple times. smaller time increments allow
+            integration of variables to daily values commonly desired.
+
+    space dimensionality:
+        scalar:
+            single point on the earths surface. lat, lon, slope, aspect are all scalars.
+        1d:
+            performant handling of list-like inputs. lat, lon, slope and aspect are all
+            1d numpy arrays of the same length.
+        2d:
+            meshgrid handling well suited for combination of final outputs with raster
+            data structures. For example, resampling a DEM to match a spectral data source
+            like landsat or sentinel and extracting the lat/lon pairs of that DEM allows
+            full specification of the lat, lon, slope, and aspect inputs for the full raster space.
+
+    TODO: for some complex partial solar tracking functions, a 3d input for slope and aspect
+            may be desired when using 2 spatial dims and 1 time dim. Presently 2d spatial
+            inputs are cast to 3d arrays by copying into the 3rd dimension.
 
     Table of variable descriptions
 
         lat                     decimal degrees latitude (float OR numpy array)
         lon                     decimal degrees longitude (float OR numpy array)
         reference_datetime      datetime at UTC
-        slope                   slope of land at lat,lon for solar energy calculations
-        aspect                  aspect of land at lat,lon for solar energy calculations
+        slope                   slope of land at lat,lon (0 is flat, 90 is vertical)
+        aspect                  aspect of land at lat,lon (0 = N, 90 = E, 180 = S, 270 = W)
         -------------------------------------------------------------------------------
-        lat                     latitude                                    (array)
-        lon                     longitude                                   (array)
-        tz                      time zone                                   (scalar)
-        rdt                     reference datetime object (date_time_obj)   (scalar)
-        ajd                     absolute julian day                         (scalar)
-        ajc                     absolute julian century                     (scalar)
-        geomean_long            geometric mean longitude of the sun         (scalar)
-        geomean_anom            geometric mean longitude anomaly of the sun (scalar)
-        earth_eccent            eccentricity of earths orbit                (scalar)
-        sun_eq_of_center        the suns equation of center                 (scalar)
-        true_long               true longitude of the sun                   (scalar)
-        true_anom               true longitude anomaly of the sun           (scalar)
-        app_long                the suns apparent longitude                 (scalar)
-        oblique_mean_ellipse    earth oblique mean ellipse                  (scalar)
-        oblique_corr            correction to earths oblique ellipse        (scalar)
-        right_ascension         suns right ascension angle                  (scalar)
-        declination             solar declination angle                     (scalar)
-        equation_of_time        equation of time (minutes)                  (scalar)
-        hour_angle_sunrise      the hour angle at sunrise                   (array)
-        solar_noon              LST of solar noon                           (array)
-        sunrise                 LST of sunrise time                         (array)
-        sunset                  LST of sunset time                          (array)
-        sunlight                LST fractional days of sunlight             (array)
-        true_solar              LST for true solar time                     (array)
-        hour_angle              total hour angle                            (array)
-        zenith                  zenith angle                                (array)
-        elevation               elevation angle                             (array)
-        azimuth                 azimuthal angle                             (array)
-        norm_surf_irradiance    incident energy on earths surface           (array)
-        surface_par             photosynthetically active radiation         (array)
-        rad_vector              radiation vector (distance in AU)           (scalar)
-        earth_distance          earths distance to sun in meters            (scalar)
-        norm_irradiance         incident solar energy at earth distance     (scalar)
+        lat                     latitude                                    (space)
+        lon                     longitude                                   (space)
+        rdt                     reference datetime object (date_time_obj)   (time)
+        ajd                     absolute julian day                         (time)
+        ajc                     absolute julian century                     (time)
+        geomean_long            geometric mean longitude of the sun         (time)
+        geomean_anom            geometric mean longitude anomaly of the sun (time)
+        earth_eccent            eccentricity of earths orbit                (time)
+        sun_eq_of_center        the suns equation of center                 (time)
+        true_long               true longitude of the sun                   (time)
+        true_anom               true longitude anomaly of the sun           (time)
+        app_long                the suns apparent longitude                 (time)
+        oblique_mean_ellipse    earth oblique mean ellipse                  (time)
+        oblique_corr            correction to earths oblique ellipse        (time)
+        right_ascension         suns right ascension angle                  (time)
+        declination             solar declination angle                     (time)
+        equation_of_time        equation of time (minutes)                  (time)
+        hour_angle_sunrise      the hour angle at sunrise                   (space, time)
+        solar_noon              LST of solar noon                           (space, time)
+        sunrise                 LST of sunrise time                         (space, time)
+        sunset                  LST of sunset time                          (space, time)
+        sunlight                LST fractional days of sunlight             (space, time)
+        true_solar              LST for true solar time                     (space, time)
+        hour_angle              total hour angle                            (space, time)
+        zenith                  zenith angle                                (space, time)
+        elevation               elevation angle                             (space, time)
+        azimuth                 azimuthal angle                             (space, time)
+        earth_distance          earths distance to sun in meters            (time)
+        sun_norm_irradiance     incident solar energy at earth distance     (time)
+        sun_vec_cartesian       cartesian vector pointing at sun            (space, time)
+        surf_vec_cartesian      cartesian vector normal to surface          (space)
+        sun_surf_angle          angle between sun_vec and surf_vec          (space, time)
+        surf_norm_irradiance    irradiance on surface with surf_vec         (space, time)
+        surf_norm_par           photosynthetically active surf_norm rad     (space, time)
 
     Units unless otherwise labeled.
         angle    = degrees
         distance = meters
-        energy   = watts or joules
-        time     = mostly in datetime objects or absolute julian time. ALL TIME is in UTC time zone!
+        energy   = joules
+        time     = datetime, timedeltas, or absolute julian time. ALL TIME is in UTC time zone!
+        power    = watts
     """
 
-    # TODO: More precise shape descriptions, space and time variant support has
-    #     # TODO: made the expected behavior slightly more complex.
-    def __init__(self, lat: FlexNum, lon: FlexNum, dt: FlexDate,
-                 slope: FlexNum = None, aspect: FlexNum = None, low_mem=False):
+    __result_store = dict()
+
+    def __init__(self,
+                 lat: FlexNum,
+                 lon: FlexNum,
+                 dt: FlexDate,
+                 slope: FlexNum = None,
+                 aspect: FlexNum = None,
+                 _air_mass_method: str = None,
+                 _pollution_condition: str = None):
         """
         Accepts vectorized positions for lat and lon, (use meshgrid) and/or list of
         multiple datetimes. Computations are fully vectorized
 
-        :param lat:     decimal degrees latitude
-        :param lon:     decimal degrees longitude
-        :param dt:  reference datetime or a list of datetimes
-        :param low_mem: if False, intermediate calculations will not be preserved. Repeated calls
-                        will recompute all values including intermediates every time.
-                        Use for very large vector spaces.
+        'lat' and 'lon' must have the same dimensions:
+            1d arrays: like a list of coordinate pairs
+            2d arrays: should form a meshgrid.
+
+        'dt' may be a single time or a 1d list of times.
+
+        'slope' and 'aspect' must either be None, or have the same dimensions as lat/lon
+
+        :param lat: decimal degrees latitude
+        :param lon: decimal degrees longitude
+        :param dt: reference datetime or a list of datetimes
+        :param slope: decimal degrees of slope (0 = flat, 90 for vertical surface)
+        :param aspect: decimal degrees of aspect (0 = N, 90 = E, 180 = S, 270 = W)
+
         """
 
-        if slope is not None:
-            raise NotImplementedError(f"'slope' argument not yet supported")
-
-        if aspect is not None:
-            raise NotImplementedError(f"'aspect' argument not yet supported")
-
-        self.low_mem = low_mem  # if True, do not save intermediate computations
-
         # check inputs for dimensional compatibility
-        lat, lon, dt, vt, vs = self._coerce_dims(lat, lon, dt)
+        lat, lon, dt, vt, vs, slope, aspect, space_shape, time_shape = \
+            self._validate_init(lat, lon, dt, slope, aspect)
 
-        self._time_is_vec = vt
-        self._space_is_vec = vs
+        self.__time_is_vec = vt
+        self.__space_is_vec = vs
+        self.space_shape = space_shape
+        self.time_shape = time_shape
 
-        self._dt = dt
-        self._lat = lat
-        self._lon = lon
+        self._dt = dt    # list of datetimes.
+        self._lat = lat  # degrees
+        self._lon = lon  # degrees
         self._lat_rad = np.radians(lat)
         self._lon_rad = np.radians(lon)
-
+        self._slope = slope     # degrees
+        self._aspect = aspect   # degrees
         self._ajd, self._ajc = sfn.get_absolute_julian_day_and_century(dt)
+
+        # solar power configuration params
+        self._air_mass_method = _air_mass_method
+        self._pollution_condition = _pollution_condition
+
 
 # = input checks and properties of the class
     @staticmethod
-    def _coerce_dims(lat: FlexNum, lon: FlexNum, dt: FlexDate):
+    def _validate_init(lat: FlexNum, lon: FlexNum, dt: FlexDate, slope: FlexNum, aspect: FlexNum) \
+            -> Tuple[FlexNum, FlexNum, FlexDate, bool, bool, FlexNum, FlexNum, Tuple, Tuple]:
         """
         Ensures that input lat, lon, and dt arguments are dimensionally compatible.
 
         latitude and longitude should be scalars or form a meshgrid.
-
-        :param lat:
-        :param lon:
-        :param dt:
-        :return:
         """
 
         # does this solver vectorize calculations over time?
         if isinstance(dt, list):
             vec_time = True
+            time_shape = len(dt),
         else:
             vec_time = False
+            time_shape = tuple()
 
         if isinstance(lat, np.ndarray) and isinstance(lon, np.ndarray):
-
             vec_space = True
+            if lat.shape != lon.shape:
+                raise AttributeError("Non scalar (lat,lon) inputs must "
+                                     "form a meshgrid such as: `lat, lon = np.meshgrid(lat, lon)`")
+            else:
+                space_shape = lat.shape
 
-            # if lat and lon shapes are not equal
-            if lat.shape != lon.shape or lat.shape == 1:
-                lat, lon = np.meshgrid(lat, lon)
+            if slope is None and aspect is None:
+                slope = np.zeros(space_shape)
+                aspect = np.zeros(space_shape)
+
+            if slope.shape != space_shape or aspect.shape != space_shape:
+                raise AttributeError("'slope', 'aspect', 'lat', and 'lon' must all have the same shape!")
 
             # if both space and time are vectorized, add 3rd time dimension to lat/lon
-            space_shape = lat.shape
+            # TODO; this is inefficient: might be consequential for large spatial arrays.
             if vec_time:
                 if len(space_shape) == 2:
-                    # make lat and lon 3 dimensions for compatibility with dt
+                    # make spatial arrays 3 dimensions for compatibility with dt
                     lat = np.repeat(lat[:, :, np.newaxis], len(dt), axis=2)
                     lon = np.repeat(lon[:, :, np.newaxis], len(dt), axis=2)
+                    slope = np.repeat(slope[:, :, np.newaxis], len(dt), axis=2)
+                    aspect = np.repeat(aspect[:, :, np.newaxis], len(dt), axis=2)
         else:
             vec_space = False
+            space_shape = tuple()
 
-        return lat, lon, dt, vec_time, vec_space
+        return lat, lon, dt, vec_time, vec_space, slope, aspect, space_shape, time_shape
+
+    @property
+    def _result_store(self):
+        return self.__result_store
 
     @property
     def time_is_vec(self):
-        return self._time_is_vec
+        return self.__time_is_vec
 
     @property
     def space_is_vec(self):
-        return self._space_is_vec
-
-# = function decorators and meta handlers
-    def _ref(self, function, attribute, *args, **kwargs):
-        """
-        decorator to check the given attribute for the result of a function first,
-        if it"s None, then execute the function with the input arguments and store
-        the result in the attribute (if store=True).
-
-        for example: the function `geomean_long` is writen as
-
-
-
-        ```
-            def geomean_long(self):
-                return self.reference_hidden(get_geomean_long, "_geomean_long")(self._ajc)
-        ```
-        which is equivalent to
-
-        ```
-            def geomean_long(self):
-                result = self._geomean_long
-                if result is None:
-                    result = get_geomean_long(self._ajc)
-                    self._geomean_long = result
-                return result
-        ```
-        """
-
-        def wrapped():
-            if hasattr(self, attribute):
-                result = getattr(self, attribute)
-            else:
-                result = None
-
-            if result is None:
-                result = function(*args, **kwargs)
-
-                if self.low_mem:
-                    setattr(self, attribute, result)
-            return result
-
-        return wrapped()
+        return self.__space_is_vec
 
 # = set on init
     def lat(self):
@@ -244,6 +302,12 @@ class SolarCalculator(object):
         """ lon in radians """
         return self._lon_rad
 
+    def slope(self):
+        return self._slope
+
+    def aspect(self):
+        return self._aspect
+
     def ajc(self):
         return self._ajc
 
@@ -253,217 +317,258 @@ class SolarCalculator(object):
     def dt(self):
         return self._dt
 
-# = computed on the fly
+# = Use value store to allow on the fly compute
+    @store_value(__result_store)
     def geomean_long(self):
-        return self._ref(sfn.get_geomean_long, "_geomean_long",
-                         self.ajc())
+        return sfn.get_geomean_long(
+            ajc=self.ajc())
 
+    @store_value(__result_store)
     def geomean_anom(self):
-        return self._ref(sfn.get_geomean_anom, "_geomean_anom",
-                         self.ajc())
+        return sfn.get_geomean_anom(
+            ajc=self.ajc())
 
+    @store_value(__result_store)
     def earth_eccent(self):
-        return self._ref(sfn.get_earth_eccent, "_earth_eccent",
-                         self.ajc())
+        return sfn.get_earth_eccent(
+            ajc=self.ajc())
 
+    @store_value(__result_store)
     def sun_eq_of_center(self):
-        return self._ref(sfn.get_sun_eq_of_center, "_sun_eq_of_center",
-                         self.ajc(), self.geomean_anom())
+        return sfn.get_sun_eq_of_center(
+            ajc=self.ajc(),
+            geomean_anom=self.geomean_anom())
 
+    @store_value(__result_store)
     def true_long(self):
-        return self._ref(sfn.get_true_long, "_true_long",
-                         self.geomean_long(), self.sun_eq_of_center())
+        return sfn.get_true_long(
+            geomean_long=self.geomean_long(),
+            sun_eq_of_center=self.sun_eq_of_center())
 
+    @store_value(__result_store)
     def true_anom(self):
-        return self._ref(sfn.get_true_anom, "_true_anom",
-                         self.geomean_anom(), self.sun_eq_of_center())
+        return sfn.get_true_anom(
+            geomean_anom=self.geomean_anom(),
+            sun_eq_of_center=self.sun_eq_of_center())
 
+    @store_value(__result_store)
     def rad_vector(self):
-        return self._ref(sfn.get_rad_vector, "_rad_vector",
-                         self.earth_eccent(), self.true_anom())
+        return sfn.get_rad_vector(
+            earth_eccent=self.earth_eccent(),
+            true_anom=self.true_anom())
 
+    @store_value(__result_store)
     def app_long(self):
-        return self._ref(sfn.get_app_long, "_app_long",
-                         self.true_long(), self.ajc())
+        return sfn.get_app_long(
+            true_long=self.true_long(),
+            ajc=self.ajc())
 
+    @store_value(__result_store)
     def oblique_mean_ellipse(self):
-        return self._ref(sfn.get_oblique_mean_ellipse, "_oblique_mean_ellipse",
-                         self.ajc())
+        return sfn.get_oblique_mean_ellipse(
+            ajc=self.ajc())
 
+    @store_value(__result_store)
     def oblique_corr(self):
-        return self._ref(sfn.get_oblique_corr, "_oblique_corr",
-                         self.ajc(), self.oblique_mean_ellipse())
+        return sfn.get_oblique_corr(
+            ajc=self.ajc(),
+            oblique_mean_ellipse=self.oblique_mean_ellipse())
 
+    @store_value(__result_store)
     def right_ascension(self):
-        return self._ref(sfn.get_right_ascension, "_right_ascension",
-                         self.app_long(), self.oblique_corr())
+        return sfn.get_right_ascension(
+            app_long=self.app_long(),
+            oblique_corr=self.oblique_corr())
 
+    @store_value(__result_store)
     def declination(self):
-        return self._ref(sfn.get_declination, "_declination",
-                         self.app_long(), self.oblique_corr())
+        return sfn.get_declination(
+            app_long=self.app_long(),
+            oblique_corr=self.oblique_corr())
 
+    @store_value(__result_store)
     def equation_of_time(self):
-        return self._ref(sfn.get_equation_of_time, "_equation_of_time",
-                         self.oblique_corr(), self.geomean_long(), self.geomean_anom(), self.earth_eccent())
+        return sfn.get_equation_of_time(
+            oblique_corr=self.oblique_corr(),
+            geomean_long=self.geomean_long(),
+            geomean_anom=self.geomean_anom(),
+            earth_eccent=self.earth_eccent())
 
+    @store_value(__result_store)
     def hour_angle_sunrise(self):
-        return self._ref(sfn.get_hour_angle_sunrise, "_hour_angle_sunrise",
-                         self.declination(), self.lat_rad())
+        return sfn.get_hour_angle_sunrise(
+            declination=self.declination(),
+            lat_r=self.lat_rad())
 
+    @store_value(__result_store)
     def solar_noon(self):
-        return self._ref(sfn.get_solar_noon, "_solar_noon",
-                         self.lon(), self.equation_of_time())
+        return sfn.get_solar_noon(
+            lon=self.lon(),
+            equation_of_time=self.equation_of_time())
 
+    @store_value(__result_store)
     def sunrise(self):
-        return self._ref(sfn.get_sunrise, "_sunrise",
-                         self.solar_noon(), self.hour_angle_sunrise())
+        return sfn.get_sunrise(
+            solar_noon=self.solar_noon(),
+            hour_angle_sunrise=self.hour_angle_sunrise())
 
+    @store_value(__result_store)
     def sunset(self):
-        return self._ref(sfn.get_sunset, "_sunset",
-                         self.solar_noon(), self.hour_angle_sunrise())
+        return sfn.get_sunset(
+            solar_noon=self.solar_noon(),
+            hour_angle_sunrise=self.hour_angle_sunrise())
 
+    @store_value(__result_store)
     def sunlight(self):
-        return self._ref(sfn.get_sunlight, "_sunlight",
-                         self.hour_angle_sunrise())
+        return sfn.get_sunlight(
+            hour_angle_sunrise=self.hour_angle_sunrise())
 
+    @store_value(__result_store)
     def true_solar(self):
-        return self._ref(sfn.get_true_solar, "_true_solar",
-                         self.lon(), self.equation_of_time(), self.dt())
+        return sfn.get_true_solar(
+            lon=self.lon(),
+            equation_of_time=self.equation_of_time(),
+            reference_datetime=self.dt())
 
+    @store_value(__result_store)
     def hour_angle(self):
-        return self._ref(sfn.get_hour_angle, "_hour_angle",
-                         self.true_solar())
+        return sfn.get_hour_angle(
+            true_solar=self.true_solar())
 
+    @store_value(__result_store)
     def zenith(self):
-        return self._ref(sfn.get_zenith, "_zenith",
-                         self.declination(), self.hour_angle(), self.lat_rad())
+        return sfn.get_zenith(
+            declination=self.declination(),
+            hour_angle=self.hour_angle(),
+            lat_r=self.lat_rad())
 
+    @store_value(__result_store)
+    def air_mass(self):
+        return sfn.get_air_mass(
+            zenith=self.zenith(),
+            method=self._air_mass_method)
+
+    @store_value(__result_store)
     def elevation(self):
-        return self._ref(sfn.get_elevation, "_elevation",
-                         self.zenith())
+        return sfn.get_elevation(
+            zenith=self.zenith())
 
+    @store_value(__result_store)
     def elevation_noatmo(self):
-        return self._ref(sfn.get_elevation_noatmo, "_elevation_noatmo",
-                         self.zenith())
+        return sfn.get_elevation_noatmo(
+            zenith=self.zenith())
 
+    @store_value(__result_store)
     def azimuth(self):
-        return self._ref(sfn.get_azimuth, "_azimuth",
-                         self.lat_rad(), self.declination(), self.hour_angle(), self.zenith())
+        return sfn.get_azimuth(
+            lat_r=self.lat_rad(),
+            declination=self.declination(),
+            hour_angle=self.hour_angle(),
+            zenith=self.zenith())
 
+    @store_value(__result_store)
     def earth_distance(self):
-        return self._ref(sfn.get_earth_distance, "_earth_distance",
-                         self.rad_vector())
+        return sfn.get_earth_distance(
+            rad_vector=self.rad_vector())
 
-    def norm_irradiance(self):
-        return self._ref(sfn.get_norm_irradiance, "_norm_irradiance",
-                         self.earth_distance())
+    @store_value(__result_store)
+    def sun_norm_toa_irradiance(self):
+        return sfn.get_sun_norm_toa_irradiance(
+            earth_distance=self.earth_distance())
 
-    def norm_surf_irradiance_noatmo(self):
-        return self._ref(sfn.get_norm_surf_irradiance, "_norm_surf_irradiance_noatmo",
-                         self.elevation_noatmo(), self.norm_irradiance())
+    @store_value(__result_store)
+    def sun_norm_boa_irradiance(self):
+        return sfn.air_mass_correction_(
+            _toa_irradiance=self.sun_norm_toa_irradiance(),
+            air_mass=self.air_mass(),
+            pollution_condition=self._pollution_condition)
 
-    def norm_surf_irradiance(self):
-        return self._ref(sfn.get_norm_surf_irradiance, "_norm_surf_irradiance",
-                         self.elevation(), self.norm_irradiance())
+    @store_value(__result_store)
+    def sun_vec_cartesian(self):
+        return sfn.get_sun_vec_cartesian(
+            azimuth=self.azimuth(),
+            elevation=self.elevation())
 
-    def surface_par(self):
-        return self._ref(sfn.get_surface_par, "_surface_par",
-                         self.norm_surf_irradiance_noatmo())
+    @store_value(__result_store)
+    def surf_vec_cartesian(self):
+        return sfn.get_surf_vec_cartesian(
+            aspect=self.aspect(),
+            slope=self.slope())
+
+    @store_value(__result_store)
+    def sun_surf_angle(self):
+        return sfn.get_sun_surf_angle(
+            sun_vec=self.sun_vec_cartesian(),
+            surface_vec=self.surf_vec_cartesian())
+
+    @store_value(__result_store)
+    def surf_norm_toa_irradiance(self):
+        return sfn.get_surf_norm_toa_irradiance(
+            sun_surf_angle=self.sun_surf_angle(),
+            sun_norm_irradiance=self.sun_norm_toa_irradiance())
+
+    @store_value(__result_store)
+    def surf_norm_boa_irradiance(self):
+        return sfn.air_mass_correction_(
+            _toa_irradiance=self.surf_norm_toa_irradiance(),
+            air_mass=self.air_mass(),
+            pollution_condition=self._pollution_condition)
+
+    @store_value(__result_store)
+    def surf_norm_toa_par(self):
+        return sfn.get_surf_norm_toa_par(self.surf_norm_toa_irradiance())
 
 # = formatted
+    @store_value(__result_store)
     def solar_noon_time(self):
-        return self._ref(_vec_timedelta, '_solar_noon_time',
-                         days=self.solar_noon())
+        return _vec_timedelta(days=self.solar_noon())
 
+    @store_value(__result_store)
     def sunlight_time(self):
-        return self._ref(_vec_timedelta, '_sunlight_time',
-                         days=self.sunlight())
+        return _vec_timedelta(days=self.sunlight())
 
+    @store_value(__result_store)
     def sunrise_time(self):
-        return self._ref(_vec_timedelta, '_sunrise_time',
-                         days=self.sunrise())
+        return _vec_timedelta(days=self.sunrise())
 
+    @store_value(__result_store)
     def sunset_time(self):
-        return self._ref(_vec_timedelta, '_sunset_time',
-                         days=self.sunset())
+        return _vec_timedelta(days=self.sunset())
 
-# = compute all
-    # TODO: improve summary function
-    def compute_all(self, verbose=False):
-        """
-
-        :param verbose:
-        :return:
-        """
+# = handlers
+    def summarize(self, verbose=False):
         compute_list = [f for f in dir(self)
                         if callable(getattr(self, f))
                         and not f.startswith("_")
-                        and not f.startswith("__")
-                        and f != "compute_all"]
+                        and f != "summarize"]
         for f in compute_list:
             result = getattr(self, f).__call__()
 
             if verbose:
                 if isinstance(result, np.ndarray):
-                    # for vectorized types, verbose summary prints means across all vector dimensions
-                    print("{:26s}{:26s}\taveraged over matrix shape={}".format(
-                        f, str(result.mean()), result.shape))
-                # elif isinstance(result, list):
-                #     print("{:26s}{:26s}\taveraged over matrix shape={}".format(
-                #         f, str(np.median(result)), len(result)))
+
+                    # TODO: some variables are always cartesian vectors, having a ending dimension of 3
+                    #   and it is inappropriate to average across the last dimension.
+                    #   How to identify? better tracking of variable dimensionality? perhaps:
+                    #   shape = (x, y, t, c) ->
+                    #   space_dims = (True, True, False, False),
+                    #   time_dims = (False, False, True, False)
+
+                    # TODO hacky exception for cartesian vector variables
+                    if "vec_cartesian" in f:
+                        mean_axis = tuple(i for i in range(len(result.shape)-1))
+                    else:
+                        mean_axis = tuple(i for i in range(len(result.shape)))
+                    result_mean = result.mean(axis=mean_axis)
+
+                    # for vectorized types, verbose summary prints means across space and time dimensions
+                    print(f"{f:27s} {str(result.shape):20s}{str(result_mean):27s}")
+
                 else:
-                    print("{:26s}{}".format(f, result))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+                    if isinstance(result, list):
+                        dim = len(result)
+                    else:
+                        dim = 1,
+                    print(f"{f:27s} {str(dim):20s}{str(result):27s}")
 
 

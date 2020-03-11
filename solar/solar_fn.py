@@ -7,7 +7,7 @@ from solar import FlexNum, FlexDate, CONSTANTS
 
 """
 Every function in this module accepts scalar or vectorized inputs.
-These vectorized inputs can be used to represent a range of space OR times
+These vectorized inputs can be used to represent a range of space and or times
 simply, without complex shaping and reshaping.
 """
 
@@ -182,7 +182,6 @@ def get_solar_noon(lon: FlexNum,
                    equation_of_time: FlexNum,
                    tz=0):
     """ calculates solar noon in (local sidereal time LST)"""
-
     eot = equation_of_time
 
     solar_noon = (720 - 4 * lon - eot + tz * 60) / 1440
@@ -282,6 +281,63 @@ def get_zenith(declination: FlexNum,
     return zenith
 
 
+# solar power related
+def get_air_mass(zenith: FlexNum, method: str = None):
+    """
+    air mass is a concept from the solar power world that accounts for the mass of air
+    between a point on the earths surface and the sun as a function of zenith angle.
+
+    This method implements the Kasten-Young formula as well as a simple spherical approximation
+    https://www.osapublishing.org/ao/abstract.cfm?uri=ao-28-22-4735
+
+    :param method: Either "kasten-young" or "spherical".
+    """
+
+    if method is None:
+        method = "kasten-young"  # default
+
+    if method == "spherical":
+        z_r = radians(zenith)
+        r = CONSTANTS.earth_radius / CONSTANTS.atm_height
+        return (r * (cos(z_r)**2) + (2*r) + 1) ** 0.5 - (r * cos(z_r))
+
+    elif method == "kasten-young":
+        z_r = radians(zenith)
+        return 1.0 / (cos(z_r) + 0.50572 * (96.07995 - zenith)**(-1.6364))
+
+
+# solar power related
+def air_mass_correction_(
+        _toa_irradiance: FlexNum,
+        air_mass: FlexNum,
+        pollution_condition: str = None):
+    """
+    Uses simple air_mass relationship to scale top of atmosphere irradiance to
+    bottom of atmosphere irradiance.
+
+    Wiki reference for pollution assumptions:
+    https://en.wikipedia.org/wiki/Air_mass_(solar_energy)#cite_note-interpolation-17
+    """
+
+    if pollution_condition is None:
+        pollution_condition = "average"
+
+    if pollution_condition == "clean":
+        base = 0.76
+        exp = 0.618
+    elif pollution_condition == "average":
+        base = 0.7
+        exp = 0.678
+    elif pollution_condition == "dirty":
+        base = 0.56
+        exp = 0.715
+    else:
+        raise ValueError(f"Invalid 'pollution_condition' {pollution_condition},"
+                         f" must be from [clean, dirty, average]")
+
+    return 1.1 * _toa_irradiance * (base ** (air_mass ** exp))
+
+
 def get_elevation_noatmo(zenith: FlexNum):
     """ solar elevation angle without atmospheric correction """
     return 90.0 - zenith
@@ -361,7 +417,7 @@ def get_azimuth(
         zenith:         vector (x,y,z)  # duplicated across z axis
         azimuth output  vector (x,y,z)  # duplicated across z axis
 
-    In either case 2 or three, all vector inputs must be identical shapes.
+    In either case 2 or 3, all vector inputs must be identical shapes.
     """
 
     lat = lat_r
@@ -386,6 +442,7 @@ def get_azimuth(
     else:
         time_vec = False
 
+    # Case 4: Both space and time variation
     if time_vec and lat_vec:
         # if both time and space are vectorized, we must cast declination(time)
         # to the third dimension. by duplicating for all lat/lon pairs.
@@ -411,29 +468,8 @@ def get_azimuth(
         )
         az[ha_n] = (540 - degrees(az_ha_n)) % 360
         azimuth = az
-        # raise NotImplementedError(
-        #     " This function does not support simultaneous time and spatial vectorization."
-        #     " Only lat, OR declination arguments may be vectors. If either are vectors, then"
-        #     " so must be hour_angle and zenith.")
 
-    elif lat_vec and not time_vec:
-        az = ha * 0
-
-        ha_p = (ha > 0)     # positive ha indices
-        ha_n = (ha <= 0)    # negative ha indices
-
-        az_ha_p = arccos(
-            ((sin(lat[ha_p]) * cos(z[ha_p])) - sin(d))
-            / (cos(lat[ha_p]) * sin(z[ha_p])))
-        az[ha_p] = (degrees(az_ha_p) + 180) % 360
-
-        az_ha_n = arccos(
-            ((sin(lat[ha_n]) * cos(z[ha_n])) - sin(d))
-            / (cos(lat[ha_n]) * sin(z[ha_n]))
-        )
-        az[ha_n] = (540 - degrees(az_ha_n)) % 360
-        azimuth = az
-
+    # Case 3: Space constant, time variation (lat_r in radians is scalar)
     elif time_vec and not lat_vec:
         az = ha * 0
 
@@ -452,7 +488,27 @@ def get_azimuth(
         az[ha_n] = (540 - degrees(az_ha_n)) % 360
         azimuth = az
 
-    else:   # all inputs are scalar
+    # Case 2: Time constant, spatial variation (declination is scalar)
+    elif lat_vec and not time_vec:
+        az = ha * 0
+
+        ha_p = (ha > 0)     # positive ha indices
+        ha_n = (ha <= 0)    # negative ha indices
+
+        az_ha_p = arccos(
+            ((sin(lat[ha_p]) * cos(z[ha_p])) - sin(d))
+            / (cos(lat[ha_p]) * sin(z[ha_p])))
+        az[ha_p] = (degrees(az_ha_p) + 180) % 360
+
+        az_ha_n = arccos(
+            ((sin(lat[ha_n]) * cos(z[ha_n])) - sin(d))
+            / (cos(lat[ha_n]) * sin(z[ha_n]))
+        )
+        az[ha_n] = (540 - degrees(az_ha_n)) % 360
+        azimuth = az
+
+    # case 1, all inputs are scalar.
+    else:
 
         if ha > 0:
             azimuth = (degrees(arccos(((sin(lat) * cos(z)) - sin(d)) / (cos(lat) * sin(z)))) + 180) % 360
@@ -460,16 +516,6 @@ def get_azimuth(
             azimuth = (540 - degrees(arccos(((sin(lat) * cos(z)) - sin(d)) / (cos(lat) * sin(z))))) % 360
 
     return azimuth
-
-
-def get_sun_vector_cartesian(elevation: FlexNum, azimuth: FlexNum):
-    """
-    Returns a vector pointing directly at the sun, from the surface on the earth, in cartesian coordinates.
-        x axis = east positive, west negative
-        y axis = north positive, south negative
-        z axis = normal to earths surface.
-    """
-    pass
 
 
 def get_earth_distance(rad_vector: FlexNum):
@@ -481,11 +527,11 @@ def get_earth_distance(rad_vector: FlexNum):
     return earth_distance
 
 
-def get_norm_irradiance(earth_distance: FlexNum):
+def get_sun_norm_toa_irradiance(earth_distance: FlexNum):
     """
-    calculates incoming solar energy in W/m^2 to a surface normal to the sun
+    Calculates incoming solar energy in W/m^2 to a surface which is normal to the sun.
 
-    inst_irradiance is calculated as
+    instantaneous norm_irradiance is calculated as
         = sun_surf_radiance *(sun_radius / earth_distance)^2
 
     then corrected as a function of solar incidence angle
@@ -502,31 +548,106 @@ def get_norm_irradiance(earth_distance: FlexNum):
     return norm_irradiance
 
 
-def get_norm_surf_irradiance(elevation: FlexNum, norm_irradiance: FlexNum):
+def _polar_to_cartesian(phi: FlexNum, theta: FlexNum):
     """
-    computes the incident solar radiation intensity (w/m^2) on a flat surface on earth.
-    (simple 2d case) No aspect correction!
+    Converts polar to cartesian coordinate unit vector (vector length of one).
 
-    NOTE: Can be used with elevation or elevation_noatmo. Using elevation with atmospheric
-    correction can introduce discontinuities that might be undesired.
+    :param phi: phi is measured as an azimuth or aspect angle in the x,y plane. (degrees)
+    :param theta: theta is measured as an angle from vertical, as zenith or slope angle. (degrees)
 
-    TODO: Add aspect support for this method.
+    note that phi may be 'Nan' where theta is zero (perfect z vector)
+    """
+    theta_r = radians(theta)
+    phi_r = radians(phi)
+
+    y = np.sin(theta_r) * np.cos(phi_r)
+    x = np.sin(theta_r) * np.sin(phi_r)
+    z = np.cos(theta_r)
+    return np.stack([x, y, z], axis=-1)
+
+
+def get_sun_vec_cartesian(azimuth: FlexNum, elevation: FlexNum):
+    """
+    Returns a vector pointing directly at the sun, from the surface on the earth, in cartesian coordinates.
+        x axis = east positive, west negative
+        y axis = north positive, south negative
+        z axis = normal and up from earth spheroid positive.
+    """
+    # NOTE: elevation is used instead of zenith here to allow atmospheric corrections to impact sun vector.
+    # polar coordinate to cartesian vector equations
+    return _polar_to_cartesian(azimuth, 90.0 - elevation)
+
+
+def get_surf_vec_cartesian(aspect: FlexNum, slope: FlexNum):
+    """
+    computes a surface normal vector in cartesian. Only used when slope and aspect are given.
+        x axis = east positive, west negative
+        y axis = north positive, south negative
+        z axis = normal and up from earth spheroid positive.
+    """
+    if slope is None and aspect is None:
+        return None
+
+    else:
+        # the angle off vertical of the surface normal vector is = to the slope
+        return _polar_to_cartesian(aspect, slope)
+
+
+def get_sun_surf_angle(sun_vec: FlexNum, surface_vec: FlexNum):
+    """
+    Gets the angle between the solar vector and the surface normal vector
     """
 
-    e_r = radians(elevation)
-    srf = sin(e_r) * norm_irradiance
+    # regardless of the simulation dimensionality, the inputs highest dimension should have
+    # 3 elements for the X,Y,Z plane. So we can unstack all other dimensions.
+    dims = sun_vec.shape
+    out_dims = dims[:-1]
+    flat_len = np.prod(out_dims)
+
+    # if there are fewer than two dims, no need for einsum manipulations
+    if len(sun_vec.shape) < 2:
+        cosines = np.dot(sun_vec, surface_vec)
+        angles = np.arccos(np.clip(cosines, -1.0, 1.0))
+        return np.degrees(angles)
+
+    else:
+        if len(sun_vec.shape) == 2:
+            v1 = sun_vec
+            v2 = surface_vec
+
+        else:   # len(sun_vec.shape) > 2
+            v1 = sun_vec.reshape((flat_len, 3))
+            v2 = surface_vec.reshape((flat_len, 3))
+
+        cosines = np.einsum("ij,ij->i", v1.reshape(-1, 3), v2.reshape(-1, 3))
+        angles = np.arccos(np.clip(cosines, -1.0, 1.0))
+        return np.degrees(angles).reshape(out_dims)
+
+
+def get_surf_norm_toa_irradiance(sun_surf_angle: FlexNum, sun_norm_irradiance: FlexNum):
+    """
+    gets the irradiance intensity normal to a surface.
+    If slope and aspect inputs were used this accounts for the angle of the earths surface.
+    """
+
+    ssa_r = radians(sun_surf_angle)
+    srf = cos(ssa_r) * sun_norm_irradiance  # a theta of zero results in full norm irradiance
 
     # set negative values to zero.
-    if isinstance(elevation, np.ndarray) and elevation.shape:
+    if isinstance(srf, np.ndarray) and srf.shape:
         srf[srf <= 0] = 0
         return srf
     else:
         return max([srf, 0.0])
 
 
-def get_surface_par(norm_surf_irradiance: FlexNum):
+def get_surf_norm_toa_par(norm_surf_irradiance: FlexNum):
     """
     photosynthetically active radiation flux
     NOTE: using atmospheric surface irradiance creates discontinuities.
     """
     return norm_surf_irradiance * CONSTANTS.etta_par
+
+
+
+
