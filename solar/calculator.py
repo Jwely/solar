@@ -1,10 +1,9 @@
 import numpy as np
 from datetime import timedelta
 from typing import Tuple, Dict
-import pandas as pd
 
 from solar import solar_fn as sfn
-from solar import FlexNum, FlexDate
+from solar.types import FlexNum, FlexDate
 
 
 def _vec_timedelta(**kwargs):
