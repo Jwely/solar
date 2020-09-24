@@ -14,7 +14,7 @@ Started with replicating astronomical algorithms by Jean Meeus.
 You can read about and see some alternate ways of computing these at
 NOAA's ESRL [here](https://www.esrl.noaa.gov/gmd/grad/solcalc/calcdetails.html)
 
-Parts have been expanded by more recent work by NREL, namely
+Parts have been expanded by more recent work by NREL, namely from
 [this document](https://www.nrel.gov/docs/fy08osti/34302.pdf)
 
 The core calculator class manages intermediate computations necessary
