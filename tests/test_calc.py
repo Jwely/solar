@@ -2,9 +2,9 @@ import unittest
 import numpy as np
 from datetime import datetime, timedelta
 
-from solar import SolarCalculator
+from jwelysolar import SolarCalculator
 from shapely.geometry import Point
-from solar.util import lat_lon_to_timezone
+from jwelysolar.util import lat_lon_to_timezone
 
 # scalar values (somewhere in washington DC)
 TEST_LAT = 38.9072

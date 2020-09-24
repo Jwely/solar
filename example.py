@@ -4,8 +4,8 @@ import seaborn as sns
 import pandas as pd
 from shapely.geometry import Point
 
-from solar.calculator import SolarCalculator
-from solar.util import local_datetime_array, localize_utc_datetimes_by_lat_lon
+from jwelysolar.calculator import SolarCalculator
+from jwelysolar.util import local_datetime_array, localize_utc_datetimes_by_lat_lon
 
 
 def basic_plots():
