@@ -270,6 +270,8 @@ class SolarCalculator(object):
             vec_space = False
             space_shape = tuple()
 
+        # TODO: need validation on slope and aspect.
+
         return lat, lon, dt, vec_time, vec_space, slope, aspect, space_shape, time_shape
 
     @property
