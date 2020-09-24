@@ -3,7 +3,20 @@ import numpy as np
 from datetime import datetime, timedelta
 
 from solar import SolarCalculator
-from tests import REFERENCE_LAT, REFERENCE_LON, REFERENCE_DATE
+from shapely.geometry import Point
+from solar.util import lat_lon_to_timezone
+
+# scalar values (somewhere in washington DC)
+TEST_LAT = 38.9072
+TEST_LON = -77.0369
+tz = lat_lon_to_timezone(Point(TEST_LON, TEST_LAT))
+TEST_DATE = datetime(2020, 1, 1, tzinfo=tz)
+
+# vector tests
+_test_lats = [TEST_LAT + i / 10 for i in range(-2, 3)]
+_test_lons = [TEST_LON + i / 10 for i in range(-2, 3)]
+TEST_LATS_GRID, TEST_LONS_GRID = np.meshgrid(_test_lats, _test_lons)
+TEST_DATES = [TEST_DATE + timedelta(hours=hour) for hour in range(24)]
 
 
 class TestCalculator(unittest.TestCase):
@@ -14,7 +27,7 @@ class TestCalculator(unittest.TestCase):
         Results must be manually verified!
         """
 
-        s = SolarCalculator(lat=REFERENCE_LAT, lon=REFERENCE_LON, dt=REFERENCE_DATE)
+        s = SolarCalculator(lat=TEST_LAT, lon=TEST_LON, dt=TEST_DATE)
         # todo
 
     def test_multipoint(self):
@@ -22,14 +35,7 @@ class TestCalculator(unittest.TestCase):
         test solar calculator for grid of points on earth surface at single time.
         Results must be manually verified!
         """
-
-        dt = REFERENCE_DATE
-
-        lat = [REFERENCE_LAT + i / 10 for i in range(-2, 1)]
-        lon = [REFERENCE_LON + i / 10 for i in range(-2, 1)]
-        lat, lon = np.meshgrid(lat, lon)
-
-        s = SolarCalculator(lat=lat, lon=lon, dt=dt)
+        s = SolarCalculator(lat=TEST_LATS_GRID, lon=TEST_LONS_GRID, dt=TEST_DATE)
         # todo
 
     def test_multitime(self):
@@ -38,11 +44,11 @@ class TestCalculator(unittest.TestCase):
         Results must be manually verified!
         """
 
-        dt = [REFERENCE_DATE +
+        dt = [TEST_DATE +
               timedelta(hours=hour)
               for hour in range(24)]
 
-        s = SolarCalculator(lat=REFERENCE_LAT, lon=REFERENCE_LON, dt=dt)
+        s = SolarCalculator(lat=TEST_LAT, lon=TEST_LON, dt=dt)
         # todo
 
     def test_multitime_multipoint(self):
@@ -51,18 +57,7 @@ class TestCalculator(unittest.TestCase):
         Results must be manually verified!
         """
         # example times on todays date at - GMT (tested in east cost USA during DST)
-        dt = [REFERENCE_DATE +
-              timedelta(hours=hour)
-              for hour in range(24)]
-
-        lat = [REFERENCE_LAT + i / 10 for i in range(-2, 3)]
-        lon = [REFERENCE_LON + i / 10 for i in range(-2, 3)]
-        lat, lon = np.meshgrid(lat, lon)
-
-        #lat = np.repeat(lat[:, :, np.newaxis], len(dt), axis=2)
-        #lon = np.repeat(lon[:, :, np.newaxis], len(dt), axis=2)
-
-        s = SolarCalculator(lat=lat, lon=lon, dt=dt)
+        s = SolarCalculator(lat=TEST_LATS_GRID, lon=TEST_LONS_GRID, dt=TEST_DATES)
         # todo
 
     def test_high_compute(self):
@@ -70,16 +65,13 @@ class TestCalculator(unittest.TestCase):
         """ test computations for very large vector space """
         # do houry going back 50 years
         now = datetime.utcnow()
-        dt = [REFERENCE_DATE +
+        dt = [TEST_DATE +
               timedelta(hours=hour)
               for hour in range(24*365*50)]
 
         lat = [38.820450 + i / 10 for i in range(-10, 10)]
         lon = [-77.050552 + i / 10 for i in range(-10, 10)]
         lat, lon = np.meshgrid(lat, lon)
-
-        lat = np.repeat(lat[:, :, np.newaxis], len(dt), axis=2)
-        lon = np.repeat(lon[:, :, np.newaxis], len(dt), axis=2)
 
         s = SolarCalculator(lat=lat, lon=lon, dt=dt, low_mem=True)
         # todo
