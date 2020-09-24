@@ -58,5 +58,5 @@ Units unless otherwise labeled.
 
 """
 
-from solar.calculator import SolarCalculator
+from jwelysolar.calculator import SolarCalculator
 

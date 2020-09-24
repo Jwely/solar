@@ -2,8 +2,8 @@ import numpy as np
 from datetime import timedelta
 from typing import Tuple, Dict
 
-from solar import solar_fn as sfn
-from solar.types import FlexNum, FlexDate
+from jwelysolar import solar_fn as sfn
+from jwelysolar.types import FlexNum, FlexDate
 
 
 def _vec_timedelta(**kwargs):

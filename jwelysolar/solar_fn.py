@@ -3,7 +3,7 @@ from typing import Tuple
 
 import numpy as np
 from numpy.core.umath import radians, sin, cos, degrees, arctan2, arcsin, tan, arccos
-from solar.types import CONSTANTS, FlexNum, FlexDate
+from jwelysolar.types import CONSTANTS, FlexNum, FlexDate
 
 """
 Every function in this module accepts scalar or vectorized inputs.

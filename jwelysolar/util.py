@@ -7,7 +7,7 @@ from dateutil import tz
 import pandas as pd
 from shapely.geometry import Point
 
-from solar.calculator import SolarCalculator
+from jwelysolar.calculator import SolarCalculator
 
 
 def local_datetime_array(

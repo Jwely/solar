@@ -5,7 +5,7 @@ to make sense of the complex relationship between a point on the earths surface 
 **There are several other libraries that do the same things and more**
 One of them, [pysolar](https://pysolar.readthedocs.io/en/latest/), does a good job comparing
 itself to other modules. This module is most like pysolar, and that module 
-offers more long term support.
+offers more long term support and more rigorous testing.
 
 
 ## What it can do.
